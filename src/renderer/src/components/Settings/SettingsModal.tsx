@@ -159,12 +159,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span>Modelo Gemini</span>
                 </label>
                 <select
-                  value={settings.geminiModel}
+                  value={settings.geminiModel === 'gemini-3.8-flash' ? 'models/gemini-3.8-flash' : settings.geminiModel}
                   onChange={(e) => handleUpdateSetting('geminiModel', e.target.value)}
                   className="w-full bg-background border border-border text-slate-200 rounded px-2.5 py-1.5 focus:border-accent focus:outline-none"
                 >
-                  <option value="gemini-2.5-flash">gemini-2.5-flash (Mais rápido, multimodal e recomendado)</option>
-                  <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                  <option value="models/gemini-3.8-flash">models/gemini-3.8-flash (Recomendado - Interactions API)</option>
+                  <option value="gemini-2.5-flash">gemini-2.5-flash</option>
                   <option value="gemini-1.5-pro">gemini-1.5-pro (Raciocínio complexo)</option>
                 </select>
               </div>

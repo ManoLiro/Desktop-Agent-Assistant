@@ -43,7 +43,7 @@ export class SettingsService {
 
   private loadSettings(): AppSettings {
     const defaultSettings: AppSettings = {
-      geminiModel: 'gemini-2.5-flash',
+      geminiModel: 'models/gemini-3.8-flash',
       responseLanguage: 'pt-BR',
       transcriptionLanguage: 'pt',
       whisperBinaryPath: '',
