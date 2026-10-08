@@ -266,47 +266,60 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {activeTab === 'shortcuts' && (
-            <div className="space-y-2">
-              <p className="text-[11px] text-muted">
-                Atalhos globais configurados no sistema operacional (disponíveis mesmo em outros apps):
-              </p>
-              <div className="space-y-1 divide-y divide-border/40 font-mono text-[11px]">
-                <div className="flex justify-between py-1.5">
-                  <span className="text-muted font-sans">Ativar/desativar assistente</span>
-                  <span className="text-accent bg-surface px-1.5 py-0.5 rounded border border-border">Ctrl+Alt+Space</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-muted font-sans">Mostrar/ocultar painel</span>
-                  <span className="text-accent bg-surface px-1.5 py-0.5 rounded border border-border">Ctrl+Alt+O</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-muted font-sans">Abrir chat em modo edição</span>
-                  <span className="text-accent bg-surface px-1.5 py-0.5 rounded border border-border">Ctrl+Alt+Enter</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-muted font-sans">Capturar monitor e explicar</span>
-                  <span className="text-accent bg-surface px-1.5 py-0.5 rounded border border-border">Ctrl+Alt+S</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-muted font-sans">Sugerir resposta à pergunta</span>
-                  <span className="text-accent bg-surface px-1.5 py-0.5 rounded border border-border">Ctrl+Alt+R</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-muted font-sans">Resumir conversa e ações</span>
-                  <span className="text-accent bg-surface px-1.5 py-0.5 rounded border border-border">Ctrl+Alt+M</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-muted font-sans">Iniciar/pausar áudio</span>
-                  <span className="text-accent bg-surface px-1.5 py-0.5 rounded border border-border">Ctrl+Alt+T</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-muted font-sans">Abrir notas para edição</span>
-                  <span className="text-accent bg-surface px-1.5 py-0.5 rounded border border-border">Ctrl+Alt+N</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-muted font-sans">Interromper tudo e ocultar</span>
-                  <span className="text-danger bg-surface px-1.5 py-0.5 rounded border border-border">Ctrl+Alt+Backspace</span>
-                </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-muted">
+                  Atalhos globais do sistema. Clique para editar caso algum colida com outros apps:
+                </p>
+                <button
+                  onClick={async () => {
+                    const defaults: Record<string, string> = {
+                      toggleAssistant: 'CommandOrControl+Alt+Space',
+                      togglePanel: 'CommandOrControl+Alt+O',
+                      focusChat: 'CommandOrControl+Alt+Return',
+                      captureScreen: 'CommandOrControl+Alt+S',
+                      suggestAnswer: 'CommandOrControl+Alt+R',
+                      summarize: 'CommandOrControl+Alt+U',
+                      toggleTranscription: 'CommandOrControl+Alt+T',
+                      openNotes: 'CommandOrControl+Alt+N',
+                      panicStop: 'CommandOrControl+Alt+Backspace'
+                    }
+                    await handleUpdateSetting('shortcuts', defaults)
+                  }}
+                  className="text-[10px] text-accent hover:underline"
+                >
+                  Restaurar Padrões
+                </button>
+              </div>
+
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                {[
+                  { key: 'toggleAssistant', label: 'Ativar / Desativar assistente' },
+                  { key: 'togglePanel', label: 'Mostrar / Ocultar painel' },
+                  { key: 'focusChat', label: 'Abrir chat em modo edição' },
+                  { key: 'captureScreen', label: 'Capturar monitor e explicar' },
+                  { key: 'suggestAnswer', label: 'Sugerir resposta à pergunta' },
+                  { key: 'summarize', label: 'Resumir conversa e ações' },
+                  { key: 'toggleTranscription', label: 'Iniciar / pausar áudio' },
+                  { key: 'openNotes', label: 'Abrir notas para edição' },
+                  { key: 'panicStop', label: 'Interromper tudo e ocultar' }
+                ].map(({ key, label }) => (
+                  <div key={key} className="flex items-center justify-between gap-2 p-1.5 rounded bg-background border border-border/70 text-xs">
+                    <span className="text-muted font-sans text-[11px] flex-1">{label}</span>
+                    <input
+                      type="text"
+                      value={settings.shortcuts?.[key] || ''}
+                      onChange={(e) => {
+                        const updated = {
+                          ...(settings.shortcuts || {}),
+                          [key]: e.target.value
+                        }
+                        handleUpdateSetting('shortcuts', updated)
+                      }}
+                      className="bg-surface border border-border text-accent font-mono text-[11px] px-2 py-0.5 rounded w-48 text-right focus:border-accent focus:outline-none"
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           )}

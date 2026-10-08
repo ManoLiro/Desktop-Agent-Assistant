@@ -311,8 +311,9 @@ export function registerIpcHandlers(services: AppServices): void {
   ipcMain.handle('perssua:save-settings', (_event, settings) => {
     try {
       settingsService.saveSettings(settings)
+      let shortcutResult: { success: boolean; conflicts: string[] } = { success: true, conflicts: [] }
       if (settings.shortcuts) {
-        shortcutService.updateShortcuts(settings.shortcuts)
+        shortcutResult = shortcutService.updateShortcuts(settings.shortcuts)
       }
       if (settings.autoAssistEnabled !== undefined) {
         if (settings.autoAssistEnabled) {
@@ -321,7 +322,7 @@ export function registerIpcHandlers(services: AppServices): void {
           autoAssistService.stop()
         }
       }
-      return { success: true }
+      return { success: shortcutResult.success, conflicts: shortcutResult.conflicts }
     } catch (err: any) {
       return { success: false, error: err.message }
     }
