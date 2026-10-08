@@ -1,0 +1,42 @@
+{
+  "name": "perssua",
+  "version": "1.0.0",
+  "description": "Perssua — Assistente Contextual Desktop",
+  "type": "module",
+  "main": "./out/main/index.js",
+  "author": "Perssua",
+  "scripts": {
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && electron-vite build",
+    "build:win": "npm run build && electron-builder --win",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@google/genai": "^2.28.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "tailwind-merge": "^2.5.5"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.16",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowSyntheticDefaultImports": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@renderer/*": ["src/renderer/src/*"],
+      "@preload/*": ["src/preload/*"]
+    }
+  },
+  "include": [
+    "src/renderer/src/**/*",
+    "src/preload/index.d.ts"
+  ]
+}

@@ -1,0 +1,146 @@
+import { app, BrowserWindow } from 'electron'
+import { SettingsService } from './services/SettingsService'
+import { OverlayService } from './services/OverlayService'
+import { ShortcutService } from './services/ShortcutService'
+import { TrayService } from './services/TrayService'
+import { GeminiProvider } from './services/GeminiProvider'
+import { ScreenCaptureService } from './services/ScreenCaptureService'
+import { TranscriptionService } from './services/TranscriptionService'
+import { ContextService } from './services/ContextService'
+import { AutoAssistService } from './services/AutoAssistService'
+import { registerIpcHandlers } from './ipc/registerIpcHandlers'
+
+// Garante instância única
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+}
+
+import { appLifecycle } from './lifecycle'
+
+let overlayService: OverlayService
+let settingsService: SettingsService
+let shortcutService: ShortcutService
+let trayService: TrayService
+let geminiProvider: GeminiProvider
+let screenCaptureService: ScreenCaptureService
+let transcriptionService: TranscriptionService
+let contextService: ContextService
+let autoAssistService: AutoAssistService
+
+async function initApp(): Promise<void> {
+  settingsService = new SettingsService()
+  overlayService = new OverlayService(settingsService)
+  trayService = new TrayService(overlayService)
+  geminiProvider = new GeminiProvider(settingsService)
+  screenCaptureService = new ScreenCaptureService(overlayService, settingsService)
+  transcriptionService = new TranscriptionService(settingsService, overlayService)
+  contextService = new ContextService(settingsService, transcriptionService)
+  autoAssistService = new AutoAssistService(
+    settingsService,
+    overlayService,
+    transcriptionService,
+    contextService,
+    geminiProvider
+  )
+
+  // Mapeamento dos atalhos globais
+  shortcutService = new ShortcutService(settingsService, {
+    onToggleAssistant: () => {
+      overlayService.toggleAssistantActive()
+    },
+    onTogglePanel: () => {
+      overlayService.togglePanelVisibility()
+    },
+    onFocusChat: () => {
+      overlayService.showPanel()
+      overlayService.setPanelMode('edit')
+      overlayService.updateState({ activeTab: 'chat' })
+    },
+    onCaptureScreen: () => {
+      const win = overlayService.getMainWindow()
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('perssua:trigger-shortcut-action', 'capture-screen')
+      }
+    },
+    onSuggestAnswer: () => {
+      const win = overlayService.getMainWindow()
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('perssua:trigger-shortcut-action', 'suggest-answer')
+      }
+    },
+    onSummarize: () => {
+      const win = overlayService.getMainWindow()
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('perssua:trigger-shortcut-action', 'summarize')
+      }
+    },
+    onToggleTranscription: () => {
+      overlayService.toggleTranscription()
+    },
+    onOpenNotes: () => {
+      overlayService.showPanel()
+      overlayService.setPanelMode('edit')
+      overlayService.updateState({ activeTab: 'notes' })
+    },
+    onPanicStop: () => {
+      // Interromper captura e requisições; ocultar painel
+      geminiProvider.cancelCurrentGeneration()
+      overlayService.setAssistantActive(false)
+      overlayService.hidePanel()
+    }
+  })
+
+  // Registra IPC
+  registerIpcHandlers({
+    overlayService,
+    settingsService,
+    shortcutService,
+    geminiProvider,
+    screenCaptureService,
+    transcriptionService,
+    contextService,
+    autoAssistService
+  })
+
+  // Conecta mudanças de estado ao menu da bandeja
+  overlayService.setStateCallback((state) => {
+    trayService.updateMenu(state)
+  })
+
+  // Inicializa Janelas e Bandeja
+  overlayService.createMainWindow()
+  trayService.init()
+  shortcutService.registerAll()
+}
+
+app.whenReady().then(initApp)
+
+app.on('second-instance', () => {
+  if (overlayService) {
+    overlayService.showPanel()
+  }
+})
+
+app.on('window-all-closed', () => {
+  // Mantém app vivo na bandeja no Windows a menos que explicitamente fechado
+  if (appLifecycle.isQuitting) {
+    app.quit()
+  }
+})
+
+app.on('before-quit', () => {
+  appLifecycle.isQuitting = true
+  if (shortcutService) {
+    shortcutService.unregisterAll()
+  }
+  if (transcriptionService) {
+    transcriptionService.stopWhisperServer()
+  }
+  if (autoAssistService) {
+    autoAssistService.stop()
+  }
+  if (trayService) {
+    trayService.destroy()
+  }
+})
