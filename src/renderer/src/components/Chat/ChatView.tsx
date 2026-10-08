@@ -1,24 +1,29 @@
 import React, { useRef, useEffect, useState } from 'react'
 import type { ChatMessage } from '@preload/index.d'
 import { ChatInput } from './ChatInput'
-import { Camera, Lightbulb, FileText, Copy, Check, Sparkles } from 'lucide-react'
+import { MarkdownMessage } from './MarkdownMessage'
+import { Camera, Lightbulb, FileText, Copy, Check, Sparkles, Key } from 'lucide-react'
 
 interface ChatViewProps {
   messages: ChatMessage[]
   streamingChunk: string
   isGenerating: boolean
+  hasApiKey: boolean
   onSendMessage: (text: string, attachScreen: boolean) => void
   onCancelGeneration: () => void
   onQuickAction: (action: 'explain-screen' | 'suggest-answer' | 'summarize') => void
+  onOpenSettings: () => void
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({
   messages,
   streamingChunk,
   isGenerating,
+  hasApiKey,
   onSendMessage,
   onCancelGeneration,
-  onQuickAction
+  onQuickAction,
+  onOpenSettings
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -70,6 +75,22 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </button>
       </div>
 
+      {/* Banner se a API Key não estiver configurada */}
+      {!hasApiKey && (
+        <div className="mx-3 mt-2 p-2 rounded-lg bg-warning/10 border border-warning/30 flex items-center justify-between text-xs text-warning select-none">
+          <div className="flex items-center gap-1.5">
+            <Key className="w-3.5 h-3.5" />
+            <span className="text-[11px]">API Key do Gemini não configurada</span>
+          </div>
+          <button
+            onClick={onOpenSettings}
+            className="px-2 py-0.5 rounded bg-warning/20 hover:bg-warning/30 text-[10px] font-semibold text-warning transition-colors"
+          >
+            Configurar
+          </button>
+        </div>
+      )}
+
       {/* Área de Mensagens */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 && !streamingChunk && (
@@ -114,9 +135,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 )}
               </div>
 
-              <div className="whitespace-pre-wrap select-text font-normal">
-                {msg.content}
-              </div>
+              {msg.role === 'user' ? (
+                <div className="whitespace-pre-wrap select-text font-normal">
+                  {msg.content}
+                </div>
+              ) : (
+                <MarkdownMessage content={msg.content} />
+              )}
             </div>
           </div>
         ))}
@@ -129,9 +154,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 <Sparkles className="w-3 h-3 animate-spin" />
                 <span>Perssua Gerando...</span>
               </div>
-              <div className="whitespace-pre-wrap select-text font-normal">
-                {streamingChunk}
-              </div>
+              <MarkdownMessage content={streamingChunk} />
             </div>
           </div>
         )}

@@ -176,9 +176,11 @@ export const App: React.FC = () => {
             messages={messages}
             streamingChunk={streamingChunk}
             isGenerating={state.isGeneratingResponse}
+            hasApiKey={state.hasApiKey}
             onSendMessage={handleSendMessage}
             onCancelGeneration={handleCancelGeneration}
             onQuickAction={handleQuickAction}
+            onOpenSettings={() => setIsSettingsOpen(true)}
           />
         )}
 
