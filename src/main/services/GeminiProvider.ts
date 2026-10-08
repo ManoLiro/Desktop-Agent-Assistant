@@ -74,10 +74,9 @@ export class GeminiProvider {
           }
         ]
 
-        const generationConfig = {
+        const generationConfig: Interactions.GenerationConfig = {
           max_output_tokens: 65536,
-          thinkingLevel: 'medium' as const,
-          thinking_level: 'medium' as const
+          thinking_level: 'medium'
         }
 
         let input: any

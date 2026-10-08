@@ -74,7 +74,7 @@ describe('GeminiProvider with Gemini 3.8 Flash Interactions API', () => {
     ])
     expect(callArgs.generation_config).toMatchObject({
       max_output_tokens: 65536,
-      thinkingLevel: 'medium'
+      thinking_level: 'medium'
     })
 
     expect(result).toBe('Esta é a resposta do Gemini 3.8 Flash.')
