@@ -209,6 +209,67 @@ export function registerIpcHandlers(services: AppServices): void {
     }
   })
 
+  ipcMain.handle('perssua:capture-screen-and-analyze-bug', async () => {
+    const prompt = contextService.getAnalyzeBugPrompt()
+    let screenImageBase64: string | undefined
+    let mimeType: string | undefined
+
+    try {
+      const capture = await screenCaptureService.captureScreen()
+      screenImageBase64 = capture.base64
+      mimeType = capture.mimeType
+    } catch (err: any) {
+      const win = overlayService.getMainWindow()
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('perssua:chat-error', `Falha na captura de tela: ${err.message}`)
+      }
+      return
+    }
+
+    const userMessage: ChatMessage = {
+      id: `usr_${Date.now()}`,
+      role: 'user',
+      content: '🐛 Analisar possível bug na tela',
+      timestamp: Date.now(),
+      hasScreenContext: true
+    }
+    chatHistory.push(userMessage)
+
+    overlayService.updateState({ isGeneratingResponse: true, activeTab: 'chat' })
+    const win = overlayService.getMainWindow()
+
+    try {
+      const fullResponse = await geminiProvider.generateContentStream({
+        prompt: contextService.composePrompt(prompt, chatHistory),
+        imageBase64: screenImageBase64,
+        mimeType,
+        onChunk: (chunk) => {
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('perssua:chat-chunk', chunk)
+          }
+        }
+      })
+
+      const assistantMessage: ChatMessage = {
+        id: `ast_${Date.now()}`,
+        role: 'assistant',
+        content: fullResponse,
+        timestamp: Date.now()
+      }
+      chatHistory.push(assistantMessage)
+
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('perssua:chat-done', assistantMessage)
+      }
+    } catch (err: any) {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('perssua:chat-error', err.message)
+      }
+    } finally {
+      overlayService.updateState({ isGeneratingResponse: false })
+    }
+  })
+
   ipcMain.handle('perssua:suggest-answer-last-question', async () => {
     const prompt = contextService.getSuggestAnswerPrompt()
     const userMessage: ChatMessage = {

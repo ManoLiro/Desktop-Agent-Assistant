@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react'
 import type { ChatMessage } from '@preload/index.d'
 import { ChatInput } from './ChatInput'
 import { MarkdownMessage } from './MarkdownMessage'
-import { Camera, Lightbulb, FileText, Copy, Check, Sparkles, Key } from 'lucide-react'
+import { Camera, Bug, Lightbulb, FileText, Copy, Check, Sparkles, Key } from 'lucide-react'
 
 interface ChatViewProps {
   messages: ChatMessage[]
@@ -11,7 +11,7 @@ interface ChatViewProps {
   hasApiKey: boolean
   onSendMessage: (text: string, attachScreen: boolean) => void
   onCancelGeneration: () => void
-  onQuickAction: (action: 'explain-screen' | 'suggest-answer' | 'summarize') => void
+  onQuickAction: (action: 'explain-screen' | 'analyze-bug' | 'suggest-answer' | 'summarize') => void
   onOpenSettings: () => void
 }
 
@@ -52,6 +52,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
         >
           <Camera className="w-3 h-3 text-accent" />
           <span>Explicar Tela</span>
+        </button>
+
+        <button
+          onClick={() => onQuickAction('analyze-bug')}
+          disabled={isGenerating}
+          className="flex items-center gap-1 px-2 py-1 rounded bg-surfaceHover hover:bg-border text-slate-200 transition-colors shrink-0 disabled:opacity-50"
+          title="Captura o monitor e analisa o código visível procurando erros e bugs"
+        >
+          <Bug className="w-3 h-3 text-rose-400" />
+          <span>Analisar Bug</span>
         </button>
 
         <button

@@ -37,6 +37,7 @@ const api: PerssuaAPI = {
   copyToClipboard: (text: string) => ipcRenderer.invoke('perssua:copy-clipboard', text),
 
   captureScreenAndExplain: () => ipcRenderer.invoke('perssua:capture-screen-and-explain'),
+  captureScreenAndAnalyzeBug: () => ipcRenderer.invoke('perssua:capture-screen-and-analyze-bug'),
   suggestAnswerToLastQuestion: () => ipcRenderer.invoke('perssua:suggest-answer-last-question'),
   summarizeConversation: () => ipcRenderer.invoke('perssua:summarize-conversation'),
 

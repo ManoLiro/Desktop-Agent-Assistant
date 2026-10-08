@@ -112,9 +112,13 @@ export const App: React.FC = () => {
     setStreamingChunk('')
   }
 
-  const handleQuickAction = (action: 'explain-screen' | 'suggest-answer' | 'summarize'): void => {
+  const handleQuickAction = (
+    action: 'explain-screen' | 'analyze-bug' | 'suggest-answer' | 'summarize'
+  ): void => {
     if (action === 'explain-screen') {
       window.perssua?.captureScreenAndExplain()
+    } else if (action === 'analyze-bug') {
+      window.perssua?.captureScreenAndAnalyzeBug()
     } else if (action === 'suggest-answer') {
       window.perssua?.suggestAnswerToLastQuestion()
     } else if (action === 'summarize') {

@@ -80,4 +80,13 @@ export class ContextService {
       'Se houver código ou erro, destaque possíveis bugs, melhorias ou a solução recomendada.'
     )
   }
+
+  public getAnalyzeBugPrompt(): string {
+    return (
+      'Analise detalhadamente a imagem da tela capturada com foco exclusivo em identificar potenciais bugs, falhas de lógica, erros de sintaxe ou exceções visíveis.\n' +
+      '1. **Localização**: Aponte exatamente a linha, componente ou trecho suspeito.\n' +
+      '2. **Diagnóstico**: Explique a causa raiz do problema de forma direta.\n' +
+      '3. **Solução**: Forneça o código corrigido e orientações práticas de correção.'
+    )
+  }
 }

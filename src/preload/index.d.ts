@@ -64,6 +64,7 @@ export interface PerssuaAPI {
 
   // Quick actions
   captureScreenAndExplain: () => Promise<void>
+  captureScreenAndAnalyzeBug: () => Promise<void>
   suggestAnswerToLastQuestion: () => Promise<void>
   summarizeConversation: () => Promise<void>
 
