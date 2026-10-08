@@ -60,6 +60,7 @@ export interface PerssuaAPI {
   onChatChunk: (callback: (chunk: string) => void) => () => void
   onChatDone: (callback: (message: ChatMessage) => void) => () => void
   onChatError: (callback: (error: string) => void) => () => void
+  onUserMessage: (callback: (message: ChatMessage) => void) => () => void
   copyToClipboard: (text: string) => Promise<boolean>
 
   // Quick actions
@@ -76,6 +77,8 @@ export interface PerssuaAPI {
   saveApiKey: (key: string) => Promise<boolean>
   hasApiKey: () => Promise<boolean>
   getAvailableScreens: () => Promise<Array<{ id: string; name: string; isPrimary: boolean }>>
+  getActiveShortcuts: () => Promise<Record<string, string>>
+  getShortcutConflicts: () => Promise<string[]>
 
   // Transcription
   toggleTranscription: () => Promise<void>

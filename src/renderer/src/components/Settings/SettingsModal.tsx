@@ -20,11 +20,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [keySavedStatus, setKeySavedStatus] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'general' | 'whisper' | 'shortcuts'>('general')
+  const [activeShortcuts, setActiveShortcuts] = useState<Record<string, string>>({})
+  const [shortcutConflicts, setShortcutConflicts] = useState<string[]>([])
 
   useEffect(() => {
     if (isOpen) {
       window.perssua?.getSettings().then((s) => setSettings(s))
       window.perssua?.getAvailableScreens().then((screens) => setAvailableScreens(screens || []))
+      window.perssua?.getActiveShortcuts().then((act) => setActiveShortcuts(act || {}))
+      window.perssua?.getShortcutConflicts().then((conf) => setShortcutConflicts(conf || []))
       setApiKeyInput('')
       setKeySavedStatus(null)
     }
@@ -304,18 +308,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       focusChat: 'CommandOrControl+Alt+Return',
                       captureScreen: 'CommandOrControl+Alt+S',
                       suggestAnswer: 'CommandOrControl+Alt+R',
-                      summarize: 'CommandOrControl+Alt+U',
+                      summarize: 'CommandOrControl+Alt+M',
                       toggleTranscription: 'CommandOrControl+Alt+T',
                       openNotes: 'CommandOrControl+Alt+N',
                       panicStop: 'CommandOrControl+Alt+Backspace'
                     }
                     await handleUpdateSetting('shortcuts', defaults)
+                    const act = await window.perssua?.getActiveShortcuts()
+                    if (act) setActiveShortcuts(act)
+                    const conf = await window.perssua?.getShortcutConflicts()
+                    if (conf) setShortcutConflicts(conf)
                   }}
                   className="text-[10px] text-accent hover:underline"
                 >
                   Restaurar Padrões
                 </button>
               </div>
+
+              {shortcutConflicts.length > 0 && (
+                <div className="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300 space-y-0.5">
+                  <p className="font-semibold">⚠️ Conflito com outro aplicativo no Windows:</p>
+                  <p className="text-[10px] text-amber-200/80">
+                    O Windows já tinha alguns atalhos ocupados. O Perssua registrou automaticamente alternativas de fallback:
+                  </p>
+                  <ul className="list-disc list-inside text-[10px] font-mono text-amber-300/90 pt-0.5">
+                    {shortcutConflicts.map((c, i) => (
+                      <li key={i}>{c}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                 {[
@@ -328,23 +350,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   { key: 'toggleTranscription', label: 'Iniciar / pausar áudio' },
                   { key: 'openNotes', label: 'Abrir notas para edição' },
                   { key: 'panicStop', label: 'Interromper tudo e ocultar' }
-                ].map(({ key, label }) => (
-                  <div key={key} className="flex items-center justify-between gap-2 p-1.5 rounded bg-background border border-border/70 text-xs">
-                    <span className="text-muted font-sans text-[11px] flex-1">{label}</span>
-                    <input
-                      type="text"
-                      value={settings.shortcuts?.[key] || ''}
-                      onChange={(e) => {
-                        const updated = {
-                          ...(settings.shortcuts || {}),
-                          [key]: e.target.value
-                        }
-                        handleUpdateSetting('shortcuts', updated)
-                      }}
-                      className="bg-surface border border-border text-accent font-mono text-[11px] px-2 py-0.5 rounded w-48 text-right focus:border-accent focus:outline-none"
-                    />
-                  </div>
-                ))}
+                ].map(({ key, label }) => {
+                  const isFallback =
+                    activeShortcuts[key] &&
+                    settings.shortcuts?.[key] &&
+                    activeShortcuts[key] !== settings.shortcuts[key]
+
+                  return (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between gap-2 p-1.5 rounded bg-background border border-border/70 text-xs"
+                    >
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <span className="text-muted font-sans text-[11px] truncate">{label}</span>
+                        {isFallback && (
+                          <span className="text-[9px] text-amber-300 font-mono">
+                            ⚡ Ativo no SO: {activeShortcuts[key]}
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={settings.shortcuts?.[key] || ''}
+                        onChange={async (e) => {
+                          const updated = {
+                            ...(settings.shortcuts || {}),
+                            [key]: e.target.value
+                          }
+                          await handleUpdateSetting('shortcuts', updated)
+                          const act = await window.perssua?.getActiveShortcuts()
+                          if (act) setActiveShortcuts(act)
+                          const conf = await window.perssua?.getShortcutConflicts()
+                          if (conf) setShortcutConflicts(conf)
+                        }}
+                        className="bg-surface border border-border text-accent font-mono text-[11px] px-2 py-0.5 rounded w-48 text-right focus:border-accent focus:outline-none"
+                      />
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}

@@ -66,6 +66,14 @@ export const App: React.FC = () => {
         setMessages((prev) => [...prev, errorMsg])
       })
 
+      const unsubUser = window.perssua.onUserMessage((message) => {
+        setStreamingChunk('')
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === message.id)) return prev
+          return [...prev, message]
+        })
+      })
+
       const unsubTranscript = window.perssua.onTranscriptSegment((seg) => {
         setSegments((prev) => [...prev, seg])
       })
@@ -75,6 +83,7 @@ export const App: React.FC = () => {
         unsubChunk()
         unsubDone()
         unsubError()
+        unsubUser()
         unsubTranscript()
       }
     }

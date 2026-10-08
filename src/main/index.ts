@@ -8,7 +8,7 @@ import { ScreenCaptureService } from './services/ScreenCaptureService'
 import { TranscriptionService } from './services/TranscriptionService'
 import { ContextService } from './services/ContextService'
 import { AutoAssistService } from './services/AutoAssistService'
-import { registerIpcHandlers } from './ipc/registerIpcHandlers'
+import { registerIpcHandlers, type QuickActionType } from './ipc/registerIpcHandlers'
 
 // Garante instância única
 const gotTheLock = app.requestSingleInstanceLock()
@@ -44,6 +44,8 @@ async function initApp(): Promise<void> {
     geminiProvider
   )
 
+  let executeQuickAction: (action: QuickActionType) => Promise<void> = async () => {}
+
   // Mapeamento dos atalhos globais
   shortcutService = new ShortcutService(settingsService, {
     onToggleAssistant: () => {
@@ -58,22 +60,13 @@ async function initApp(): Promise<void> {
       overlayService.updateState({ activeTab: 'chat' })
     },
     onCaptureScreen: () => {
-      const win = overlayService.getMainWindow()
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:trigger-shortcut-action', 'capture-screen')
-      }
+      executeQuickAction('capture-screen')
     },
     onSuggestAnswer: () => {
-      const win = overlayService.getMainWindow()
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:trigger-shortcut-action', 'suggest-answer')
-      }
+      executeQuickAction('suggest-answer')
     },
     onSummarize: () => {
-      const win = overlayService.getMainWindow()
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:trigger-shortcut-action', 'summarize')
-      }
+      executeQuickAction('summarize')
     },
     onToggleTranscription: () => {
       overlayService.toggleTranscription()
@@ -92,7 +85,7 @@ async function initApp(): Promise<void> {
   })
 
   // Registra IPC
-  registerIpcHandlers({
+  const ipcResult = registerIpcHandlers({
     overlayService,
     settingsService,
     shortcutService,
@@ -102,6 +95,7 @@ async function initApp(): Promise<void> {
     contextService,
     autoAssistService
   })
+  executeQuickAction = ipcResult.executeQuickAction
 
   // Conecta mudanças de estado ao menu da bandeja
   overlayService.setStateCallback((state) => {

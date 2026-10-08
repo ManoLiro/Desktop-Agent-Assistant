@@ -10,6 +10,13 @@ import type { ContextService } from '../services/ContextService'
 import type { AutoAssistService } from '../services/AutoAssistService'
 import type { ChatMessage } from '../../preload/index.d'
 
+export type QuickActionType = 'capture-screen' | 'analyze-bug' | 'suggest-answer' | 'summarize'
+
+export interface IpcHandlersResult {
+  executeQuickAction: (action: QuickActionType) => Promise<void>
+  getChatHistory: () => ChatMessage[]
+}
+
 export interface AppServices {
   overlayService: OverlayService
   settingsService: SettingsService
@@ -21,7 +28,7 @@ export interface AppServices {
   autoAssistService: AutoAssistService
 }
 
-export function registerIpcHandlers(services: AppServices): void {
+export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
   const {
     overlayService,
     settingsService,
@@ -147,35 +154,76 @@ export function registerIpcHandlers(services: AppServices): void {
     return true
   })
 
-  // Ações rápidas
-  ipcMain.handle('perssua:capture-screen-and-explain', async () => {
-    const prompt = contextService.getExplainScreenPrompt()
+  // Função centralizada para execução de Ações Rápidas (usada tanto por atalhos globais quanto pela UI)
+  async function executeQuickAction(action: QuickActionType): Promise<void> {
+    const win = overlayService.getMainWindow()
+
+    if (geminiProvider.isGenerating()) {
+      geminiProvider.cancelCurrentGeneration()
+    }
+
+    let prompt = ''
+    let userMessageContent = ''
+    let shouldCaptureScreen = false
+
+    switch (action) {
+      case 'capture-screen':
+        prompt = contextService.getExplainScreenPrompt()
+        userMessageContent = '📸 Explicar conteúdo da tela atual'
+        shouldCaptureScreen = true
+        break
+      case 'analyze-bug':
+        prompt = contextService.getAnalyzeBugPrompt()
+        userMessageContent = '🐛 Analisar possível bug na tela'
+        shouldCaptureScreen = true
+        break
+      case 'suggest-answer':
+        prompt = contextService.getSuggestAnswerPrompt()
+        userMessageContent = '💡 Sugerir resposta à última pergunta da conversa'
+        shouldCaptureScreen = false
+        break
+      case 'summarize':
+        prompt = contextService.getSummarizePrompt()
+        userMessageContent = '📝 Resumir conversa atual e itens de ação'
+        shouldCaptureScreen = false
+        break
+    }
+
     let screenImageBase64: string | undefined
     let mimeType: string | undefined
 
-    try {
-      const capture = await screenCaptureService.captureScreen()
-      screenImageBase64 = capture.base64
-      mimeType = capture.mimeType
-    } catch (err: any) {
-      const win = overlayService.getMainWindow()
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-error', `Falha na captura de tela: ${err.message}`)
+    if (shouldCaptureScreen) {
+      try {
+        const capture = await screenCaptureService.captureScreen()
+        screenImageBase64 = capture.base64
+        mimeType = capture.mimeType
+      } catch (err: any) {
+        console.error(`[QuickAction] Falha ao capturar tela: ${err.message}`)
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('perssua:chat-error', `Falha na captura de tela: ${err.message}`)
+        }
+        return
       }
-      return
     }
+
+    // Exibe o painel, restaura modo interativo de edição e seleciona aba de chat
+    overlayService.showPanel()
+    overlayService.setPanelMode('edit')
+    overlayService.updateState({ activeTab: 'chat', isGeneratingResponse: true })
 
     const userMessage: ChatMessage = {
       id: `usr_${Date.now()}`,
       role: 'user',
-      content: '📸 Explicar conteúdo da tela atual',
+      content: userMessageContent,
       timestamp: Date.now(),
-      hasScreenContext: true
+      hasScreenContext: shouldCaptureScreen
     }
     chatHistory.push(userMessage)
 
-    overlayService.updateState({ isGeneratingResponse: true, activeTab: 'chat' })
-    const win = overlayService.getMainWindow()
+    // Notifica UI da mensagem do usuário para que o balão apareça instantaneamente
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('perssua:user-message', userMessage)
+    }
 
     try {
       const fullResponse = await geminiProvider.generateContentStream({
@@ -201,159 +249,30 @@ export function registerIpcHandlers(services: AppServices): void {
         win.webContents.send('perssua:chat-done', assistantMessage)
       }
     } catch (err: any) {
+      console.error(`[QuickAction] Erro na geração do Gemini: ${err.message}`)
       if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-error', err.message)
+        win.webContents.send('perssua:chat-error', err.message || 'Erro inesperado na geração.')
       }
     } finally {
       overlayService.updateState({ isGeneratingResponse: false })
     }
+  }
+
+  // Handlers IPC para Ações Rápidas acionadas pela UI
+  ipcMain.handle('perssua:capture-screen-and-explain', async () => {
+    await executeQuickAction('capture-screen')
   })
 
   ipcMain.handle('perssua:capture-screen-and-analyze-bug', async () => {
-    const prompt = contextService.getAnalyzeBugPrompt()
-    let screenImageBase64: string | undefined
-    let mimeType: string | undefined
-
-    try {
-      const capture = await screenCaptureService.captureScreen()
-      screenImageBase64 = capture.base64
-      mimeType = capture.mimeType
-    } catch (err: any) {
-      const win = overlayService.getMainWindow()
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-error', `Falha na captura de tela: ${err.message}`)
-      }
-      return
-    }
-
-    const userMessage: ChatMessage = {
-      id: `usr_${Date.now()}`,
-      role: 'user',
-      content: '🐛 Analisar possível bug na tela',
-      timestamp: Date.now(),
-      hasScreenContext: true
-    }
-    chatHistory.push(userMessage)
-
-    overlayService.updateState({ isGeneratingResponse: true, activeTab: 'chat' })
-    const win = overlayService.getMainWindow()
-
-    try {
-      const fullResponse = await geminiProvider.generateContentStream({
-        prompt: contextService.composePrompt(prompt, chatHistory),
-        imageBase64: screenImageBase64,
-        mimeType,
-        onChunk: (chunk) => {
-          if (win && !win.isDestroyed()) {
-            win.webContents.send('perssua:chat-chunk', chunk)
-          }
-        }
-      })
-
-      const assistantMessage: ChatMessage = {
-        id: `ast_${Date.now()}`,
-        role: 'assistant',
-        content: fullResponse,
-        timestamp: Date.now()
-      }
-      chatHistory.push(assistantMessage)
-
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-done', assistantMessage)
-      }
-    } catch (err: any) {
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-error', err.message)
-      }
-    } finally {
-      overlayService.updateState({ isGeneratingResponse: false })
-    }
+    await executeQuickAction('analyze-bug')
   })
 
   ipcMain.handle('perssua:suggest-answer-last-question', async () => {
-    const prompt = contextService.getSuggestAnswerPrompt()
-    const userMessage: ChatMessage = {
-      id: `usr_${Date.now()}`,
-      role: 'user',
-      content: '💡 Sugerir resposta à última pergunta da conversa',
-      timestamp: Date.now()
-    }
-    chatHistory.push(userMessage)
-
-    overlayService.updateState({ isGeneratingResponse: true, activeTab: 'chat' })
-    const win = overlayService.getMainWindow()
-
-    try {
-      const fullResponse = await geminiProvider.generateContentStream({
-        prompt: contextService.composePrompt(prompt, chatHistory),
-        onChunk: (chunk) => {
-          if (win && !win.isDestroyed()) {
-            win.webContents.send('perssua:chat-chunk', chunk)
-          }
-        }
-      })
-
-      const assistantMessage: ChatMessage = {
-        id: `ast_${Date.now()}`,
-        role: 'assistant',
-        content: fullResponse,
-        timestamp: Date.now()
-      }
-      chatHistory.push(assistantMessage)
-
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-done', assistantMessage)
-      }
-    } catch (err: any) {
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-error', err.message)
-      }
-    } finally {
-      overlayService.updateState({ isGeneratingResponse: false })
-    }
+    await executeQuickAction('suggest-answer')
   })
 
   ipcMain.handle('perssua:summarize-conversation', async () => {
-    const prompt = contextService.getSummarizePrompt()
-    const userMessage: ChatMessage = {
-      id: `usr_${Date.now()}`,
-      role: 'user',
-      content: '📝 Resumir conversa atual e itens de ação',
-      timestamp: Date.now()
-    }
-    chatHistory.push(userMessage)
-
-    overlayService.updateState({ isGeneratingResponse: true, activeTab: 'chat' })
-    const win = overlayService.getMainWindow()
-
-    try {
-      const fullResponse = await geminiProvider.generateContentStream({
-        prompt: contextService.composePrompt(prompt, chatHistory),
-        onChunk: (chunk) => {
-          if (win && !win.isDestroyed()) {
-            win.webContents.send('perssua:chat-chunk', chunk)
-          }
-        }
-      })
-
-      const assistantMessage: ChatMessage = {
-        id: `ast_${Date.now()}`,
-        role: 'assistant',
-        content: fullResponse,
-        timestamp: Date.now()
-      }
-      chatHistory.push(assistantMessage)
-
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-done', assistantMessage)
-      }
-    } catch (err: any) {
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-error', err.message)
-      }
-    } finally {
-      overlayService.updateState({ isGeneratingResponse: false })
-    }
+    await executeQuickAction('summarize')
   })
 
   // Notas e configurações
@@ -416,4 +335,18 @@ export function registerIpcHandlers(services: AppServices): void {
     const samples = new Int16Array(chunk)
     transcriptionService.handleAudioChunk(samples, sampleRate)
   })
+
+  // Atalhos e conflitos
+  ipcMain.handle('perssua:get-active-shortcuts', () => {
+    return shortcutService.getActiveShortcuts()
+  })
+
+  ipcMain.handle('perssua:get-shortcut-conflicts', () => {
+    return shortcutService.getConflicts()
+  })
+
+  return {
+    executeQuickAction,
+    getChatHistory: () => [...chatHistory]
+  }
 }

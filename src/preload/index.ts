@@ -34,6 +34,11 @@ const api: PerssuaAPI = {
     ipcRenderer.on('perssua:chat-error', handler)
     return () => ipcRenderer.removeListener('perssua:chat-error', handler)
   },
+  onUserMessage: (callback) => {
+    const handler = (_: Electron.IpcRendererEvent, message: ChatMessage): void => callback(message)
+    ipcRenderer.on('perssua:user-message', handler)
+    return () => ipcRenderer.removeListener('perssua:user-message', handler)
+  },
   copyToClipboard: (text: string) => ipcRenderer.invoke('perssua:copy-clipboard', text),
 
   captureScreenAndExplain: () => ipcRenderer.invoke('perssua:capture-screen-and-explain'),
@@ -48,6 +53,8 @@ const api: PerssuaAPI = {
   saveApiKey: (key: string) => ipcRenderer.invoke('perssua:save-api-key', key),
   hasApiKey: () => ipcRenderer.invoke('perssua:has-api-key'),
   getAvailableScreens: () => ipcRenderer.invoke('perssua:get-available-screens'),
+  getActiveShortcuts: () => ipcRenderer.invoke('perssua:get-active-shortcuts'),
+  getShortcutConflicts: () => ipcRenderer.invoke('perssua:get-shortcut-conflicts'),
 
   toggleTranscription: () => ipcRenderer.invoke('perssua:toggle-transcription'),
   onTranscriptSegment: (callback) => {

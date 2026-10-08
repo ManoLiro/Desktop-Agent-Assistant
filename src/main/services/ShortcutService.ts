@@ -14,9 +14,15 @@ export interface ShortcutHandlers {
 }
 
 const FALLBACK_SHORTCUTS: Record<string, string[]> = {
+  toggleAssistant: ['CommandOrControl+Shift+Space', 'Alt+Shift+Space'],
+  togglePanel: ['CommandOrControl+Shift+O', 'Alt+Shift+O'],
+  focusChat: ['CommandOrControl+Alt+I', 'CommandOrControl+Shift+Return', 'CommandOrControl+Shift+Enter'],
+  captureScreen: ['CommandOrControl+Shift+S', 'CommandOrControl+Alt+C', 'CommandOrControl+Alt+P'],
+  suggestAnswer: ['CommandOrControl+Alt+A', 'CommandOrControl+Shift+R'],
   summarize: ['CommandOrControl+Alt+U', 'CommandOrControl+Shift+M'],
-  focusChat: ['CommandOrControl+Alt+I', 'CommandOrControl+Shift+Return'],
-  suggestAnswer: ['CommandOrControl+Alt+A', 'CommandOrControl+Shift+R']
+  toggleTranscription: ['CommandOrControl+Shift+T', 'Alt+Shift+T'],
+  openNotes: ['CommandOrControl+Shift+N', 'Alt+Shift+N'],
+  panicStop: ['CommandOrControl+Shift+Escape', 'CommandOrControl+Shift+Backspace']
 }
 
 export class ShortcutService {
@@ -70,6 +76,7 @@ export class ShortcutService {
           this.registeredShortcuts.set(accelerator, actionKey)
           this.activeShortcutsMap[actionKey] = accelerator
           registered = true
+          console.log(`[ShortcutService] Atalho registrado: ${accelerator} (${actionKey})`)
         }
       } catch (err) {
         console.error(`[ShortcutService] Erro ao registrar atalho: ${accelerator} (${actionKey})`, err)
