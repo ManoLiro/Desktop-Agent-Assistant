@@ -47,6 +47,7 @@ const api: PerssuaAPI = {
   saveSettings: (settings: Partial<AppSettings>) => ipcRenderer.invoke('perssua:save-settings', settings),
   saveApiKey: (key: string) => ipcRenderer.invoke('perssua:save-api-key', key),
   hasApiKey: () => ipcRenderer.invoke('perssua:has-api-key'),
+  getAvailableScreens: () => ipcRenderer.invoke('perssua:get-available-screens'),
 
   toggleTranscription: () => ipcRenderer.invoke('perssua:toggle-transcription'),
   onTranscriptSegment: (callback) => {

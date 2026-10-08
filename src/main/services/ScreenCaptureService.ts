@@ -131,11 +131,17 @@ export class ScreenCaptureService {
     }
   }
 
-  public async getAvailableScreens(): Promise<Array<{ id: string; name: string }>> {
+  public async getAvailableScreens(): Promise<Array<{ id: string; name: string; isPrimary: boolean }>> {
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: { width: 160, height: 90 }
     })
-    return sources.map((s) => ({ id: s.id, name: s.name }))
+    const primary = screen.getPrimaryDisplay()
+
+    return sources.map((s) => ({
+      id: s.id,
+      name: s.name,
+      isPrimary: s.display_id === String(primary.id)
+    }))
   }
 }

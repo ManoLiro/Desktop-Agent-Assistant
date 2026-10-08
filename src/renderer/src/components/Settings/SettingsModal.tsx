@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import type { AppSettings } from '@preload/index.d'
-import { X, Key, Shield, Cpu, Sparkles, Sliders, Check } from 'lucide-react'
+import { X, Key, Shield, Cpu, Sparkles, Sliders, Check, Monitor } from 'lucide-react'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -16,6 +16,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSettingsSaved
 }) => {
   const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [availableScreens, setAvailableScreens] = useState<Array<{ id: string; name: string; isPrimary: boolean }>>([])
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [keySavedStatus, setKeySavedStatus] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'general' | 'whisper' | 'shortcuts'>('general')
@@ -23,6 +24,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       window.perssua?.getSettings().then((s) => setSettings(s))
+      window.perssua?.getAvailableScreens().then((screens) => setAvailableScreens(screens || []))
       setApiKeyInput('')
       setKeySavedStatus(null)
     }
@@ -167,6 +169,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <option value="gemini-2.5-flash">gemini-2.5-flash</option>
                   <option value="gemini-1.5-pro">gemini-1.5-pro (Raciocínio complexo)</option>
                 </select>
+              </div>
+
+              {/* Monitor para Captura */}
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Monitor className="w-3.5 h-3.5 text-accent" />
+                  <span>Monitor para Captura de Tela</span>
+                </label>
+                <select
+                  value={settings.selectedMonitorId}
+                  onChange={(e) => handleUpdateSetting('selectedMonitorId', e.target.value)}
+                  className="w-full bg-background border border-border text-slate-200 rounded px-2.5 py-1.5 focus:border-accent focus:outline-none"
+                >
+                  <option value="">Automático (Monitor Principal)</option>
+                  {availableScreens.map((sc) => (
+                    <option key={sc.id} value={sc.id}>
+                      {sc.name} {sc.isPrimary ? '(Principal)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-muted leading-tight">
+                  Selecione qual tela o Perssua deve ler ao usar &quot;Explicar Tela&quot; ou &quot;Analisar Bug&quot;.
+                </p>
               </div>
 
               {/* Idioma de resposta */}

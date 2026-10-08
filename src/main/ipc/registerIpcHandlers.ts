@@ -399,6 +399,10 @@ export function registerIpcHandlers(services: AppServices): void {
     return settingsService.hasApiKey()
   })
 
+  ipcMain.handle('perssua:get-available-screens', async () => {
+    return screenCaptureService.getAvailableScreens()
+  })
+
   // Transcrição e Audio Worker
   ipcMain.handle('perssua:toggle-transcription', () => {
     overlayService.toggleTranscription()

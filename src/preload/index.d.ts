@@ -75,6 +75,7 @@ export interface PerssuaAPI {
   saveSettings: (settings: Partial<AppSettings>) => Promise<{ success: boolean; error?: string }>
   saveApiKey: (key: string) => Promise<boolean>
   hasApiKey: () => Promise<boolean>
+  getAvailableScreens: () => Promise<Array<{ id: string; name: string; isPrimary: boolean }>>
 
   // Transcription
   toggleTranscription: () => Promise<void>
