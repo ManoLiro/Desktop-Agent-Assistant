@@ -87,10 +87,10 @@ export class OverlayService {
       maxWidth: 900,
       maxHeight: 1400,
       frame: false,
-      transparent: true,
+      transparent: false,
       alwaysOnTop: true,
       skipTaskbar: false,
-      backgroundColor: '#00000000',
+      backgroundColor: '#0d1117',
       hasShadow: true,
       show: false, // Só exibe após setContentProtection
       webPreferences: {
@@ -102,9 +102,10 @@ export class OverlayService {
       }
     })
 
-    // Ativa proteção de conteúdo antes da exibição
+    // Ativa proteção de conteúdo antes da exibição (WDA_EXCLUDEFROMCAPTURE)
     try {
       this.mainWindow.setContentProtection(true)
+      console.log('[OverlayService] setContentProtection(true) aplicado com sucesso.')
     } catch (err) {
       console.warn('[OverlayService] Falha ao configurar setContentProtection:', err)
       this.state.contentProtectionStatus = 'Proteção indisponível neste ambiente'
@@ -190,6 +191,11 @@ export class OverlayService {
 
   public showPanel(): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      try {
+        this.mainWindow.setContentProtection(true)
+      } catch (err) {
+        console.warn('[OverlayService] Erro ao reaplicar proteção em showPanel:', err)
+      }
       this.mainWindow.show()
       this.mainWindow.setAlwaysOnTop(true, 'screen-saver')
       this.mainWindow.focus()
