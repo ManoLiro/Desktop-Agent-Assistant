@@ -1,3 +1,5 @@
+@import 'katex/dist/katex.min.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -56,4 +58,17 @@ body {
 
 .animate-pulse-dot {
   animation: pulse-dot 1.8s infinite ease-in-out;
+}
+
+/* Fórmulas matemáticas KaTeX em tema escuro */
+.katex {
+  font-size: 1.05em !important;
+  color: #79c0ff;
+}
+
+.katex-display {
+  margin: 0.5em 0 !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25em 0;
 }
