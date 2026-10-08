@@ -1,5 +1,6 @@
 import { BrowserWindow, screen, session, desktopCapturer, app } from 'electron'
 import * as path from 'path'
+import * as fs from 'fs'
 import { appLifecycle } from '../lifecycle'
 import type { SettingsService, WindowBounds } from './SettingsService'
 import type { PerssuaState } from '../../preload/index.d'
@@ -9,6 +10,20 @@ export class OverlayService {
   private audioWorkerWindow: BrowserWindow | null = null
   private settingsService: SettingsService
   private onStateChangeCallback?: (state: PerssuaState) => void
+
+  private getPreloadPath(): string {
+    const candidates = [
+      path.join(__dirname, '../preload/index.js'),
+      path.join(__dirname, '../preload/index.mjs'),
+      path.join(__dirname, '../preload/index.cjs')
+    ]
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return candidate
+      }
+    }
+    return candidates[0]
+  }
 
   private state: PerssuaState = {
     isAssistantActive: false,
@@ -79,7 +94,7 @@ export class OverlayService {
       hasShadow: true,
       show: false, // Só exibe após setContentProtection
       webPreferences: {
-        preload: path.join(__dirname, '../preload/index.js'),
+        preload: this.getPreloadPath(),
         sandbox: false,
         contextIsolation: true,
         nodeIntegration: false,
@@ -140,7 +155,7 @@ export class OverlayService {
       width: 300,
       height: 300,
       webPreferences: {
-        preload: path.join(__dirname, '../preload/index.js'),
+        preload: this.getPreloadPath(),
         sandbox: false,
         contextIsolation: true,
         nodeIntegration: false,

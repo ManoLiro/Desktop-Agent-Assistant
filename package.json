@@ -2,7 +2,6 @@
   "name": "perssua",
   "version": "1.0.0",
   "description": "Perssua — Assistente Contextual Desktop",
-  "type": "module",
   "main": "./out/main/index.js",
   "author": "Perssua",
   "scripts": {
