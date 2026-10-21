@@ -8,6 +8,7 @@ import type { ScreenCaptureService } from '../services/ScreenCaptureService'
 import type { TranscriptionService } from '../services/TranscriptionService'
 import type { ContextService } from '../services/ContextService'
 import type { AutoAssistService } from '../services/AutoAssistService'
+import type { GenerationCoordinator } from '../services/GenerationCoordinator'
 import type { ChatMessage } from '../../preload/index.d'
 
 export type QuickActionType = 'capture-screen' | 'analyze-bug' | 'suggest-answer' | 'summarize'
@@ -26,6 +27,7 @@ export interface AppServices {
   transcriptionService: TranscriptionService
   contextService: ContextService
   autoAssistService: AutoAssistService
+  generationCoordinator: GenerationCoordinator
 }
 
 export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
@@ -37,7 +39,8 @@ export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
     screenCaptureService,
     transcriptionService,
     contextService,
-    autoAssistService
+    autoAssistService,
+    generationCoordinator
   } = services
 
   let chatHistory: ChatMessage[] = []
@@ -53,6 +56,7 @@ export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
       transcriptionService.startWhisperServer()
       autoAssistService.start()
     } else {
+      generationCoordinator.cancelCurrent()
       geminiProvider.cancelCurrentGeneration()
       autoAssistService.stop()
       transcriptionService.stopWhisperServer()
@@ -73,6 +77,7 @@ export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
 
   ipcMain.handle('perssua:quit-app', () => {
     appLifecycle.isQuitting = true
+    generationCoordinator.cancelCurrent()
     geminiProvider.cancelCurrentGeneration()
     transcriptionService.stopWhisperServer()
     shortcutService.unregisterAll()
@@ -85,6 +90,16 @@ export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
 
   // Chat com IA
   ipcMain.handle('perssua:send-chat', async (_event, { prompt, attachScreen }) => {
+    const win = overlayService.getMainWindow()
+    const currentSessionId = generationCoordinator.getSessionId()
+
+    // Reserva síncrona no GenerationCoordinator (preempciona auto-assist se estiver ativo)
+    const reservation = generationCoordinator.reserve('manual', currentSessionId)
+    if (!reservation.ok || !reservation.requestId || !reservation.abortController) {
+      return
+    }
+    const { requestId, abortController } = reservation
+
     let screenImageBase64: string | undefined
     let mimeType: string | undefined
 
@@ -103,48 +118,61 @@ export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
       role: 'user',
       content: prompt,
       timestamp: Date.now(),
+      origin: 'manual',
       hasScreenContext: !!screenImageBase64
     }
     chatHistory.push(userMessage)
 
-    const composedPrompt = contextService.composePrompt(prompt, chatHistory)
-    const win = overlayService.getMainWindow()
+    const contextResult = contextService.composeContext(prompt, {
+      chatHistory,
+      attachScreen: !!screenImageBase64
+    })
 
     try {
       overlayService.updateState({ isGeneratingResponse: true })
 
       const fullResponse = await geminiProvider.generateContentStream({
-        prompt: composedPrompt,
+        prompt: contextResult.prompt,
         imageBase64: screenImageBase64,
         mimeType,
+        signal: abortController.signal,
         onChunk: (chunk) => {
-          if (win && !win.isDestroyed()) {
+          if (generationCoordinator.isJobActive(requestId, currentSessionId) && win && !win.isDestroyed()) {
             win.webContents.send('perssua:chat-chunk', chunk)
           }
         }
       })
 
-      const assistantMessage: ChatMessage = {
-        id: `ast_${Date.now()}`,
-        role: 'assistant',
-        content: fullResponse,
-        timestamp: Date.now()
-      }
-      chatHistory.push(assistantMessage)
+      if (generationCoordinator.isJobActive(requestId, currentSessionId)) {
+        const assistantMessage: ChatMessage = {
+          id: `ast_${Date.now()}`,
+          role: 'assistant',
+          content: fullResponse,
+          timestamp: Date.now(),
+          origin: 'manual'
+        }
+        chatHistory.push(assistantMessage)
 
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-done', assistantMessage)
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('perssua:chat-done', assistantMessage)
+        }
       }
     } catch (err: any) {
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-error', err.message || 'Erro inesperado na geração.')
+      if (!abortController.signal.aborted) {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('perssua:chat-error', err.message || 'Erro inesperado na geração.')
+        }
       }
     } finally {
-      overlayService.updateState({ isGeneratingResponse: false })
+      generationCoordinator.release(requestId)
+      if (!generationCoordinator.isGenerating()) {
+        overlayService.updateState({ isGeneratingResponse: false })
+      }
     }
   })
 
   ipcMain.handle('perssua:cancel-chat', () => {
+    generationCoordinator.cancelCurrent()
     geminiProvider.cancelCurrentGeneration()
     overlayService.updateState({ isGeneratingResponse: false })
   })
@@ -157,14 +185,19 @@ export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
   // Função centralizada para execução de Ações Rápidas (usada tanto por atalhos globais quanto pela UI)
   async function executeQuickAction(action: QuickActionType): Promise<void> {
     const win = overlayService.getMainWindow()
+    const currentSessionId = generationCoordinator.getSessionId()
 
-    if (geminiProvider.isGenerating()) {
-      geminiProvider.cancelCurrentGeneration()
+    // Reserva síncrona com preempção de requisições de menor prioridade (auto-assist)
+    const reservation = generationCoordinator.reserve('quick-action', currentSessionId)
+    if (!reservation.ok || !reservation.requestId || !reservation.abortController) {
+      return
     }
+    const { requestId, abortController } = reservation
 
     let prompt = ''
     let userMessageContent = ''
     let shouldCaptureScreen = false
+    let detectedQuestionText: string | undefined
 
     switch (action) {
       case 'capture-screen':
@@ -177,16 +210,33 @@ export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
         userMessageContent = '🐛 Analisar possível bug na tela'
         shouldCaptureScreen = true
         break
-      case 'suggest-answer':
-        prompt = contextService.getSuggestAnswerPrompt()
-        userMessageContent = '💡 Sugerir resposta à última pergunta da conversa'
+      case 'suggest-answer': {
+        const detected = contextService.extractRecentQuestions()
+        detectedQuestionText = detected?.questionText
+        prompt = contextService.getSuggestAnswerPrompt(detectedQuestionText)
+        if (detectedQuestionText) {
+          userMessageContent = `🎯 Pergunta identificada: "${detectedQuestionText}"`
+        } else {
+          userMessageContent = '💡 Sugerir resposta à última pergunta da conversa'
+        }
         shouldCaptureScreen = false
         break
-      case 'summarize':
-        prompt = contextService.getSummarizePrompt()
-        userMessageContent = '📝 Resumir conversa atual e itens de ação'
+      }
+      case 'summarize': {
+        // Primeira passagem de contexto para calcular intervalo pós-descarte
+        const tempContext = contextService.composeContext(contextService.getSummarizePrompt(), {
+          chatHistory,
+          forSummarize: true
+        })
+        const intervalText =
+          tempContext.intervalStart && tempContext.intervalEnd
+            ? `${tempContext.intervalStart} – ${tempContext.intervalEnd}`
+            : 'trecho recente'
+        prompt = contextService.getSummarizePrompt(intervalText)
+        userMessageContent = `📝 Resumo do trecho recente (${intervalText})`
         shouldCaptureScreen = false
         break
+      }
     }
 
     let screenImageBase64: string | undefined
@@ -199,6 +249,7 @@ export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
         mimeType = capture.mimeType
       } catch (err: any) {
         console.error(`[QuickAction] Falha ao capturar tela: ${err.message}`)
+        generationCoordinator.release(requestId)
         if (win && !win.isDestroyed()) {
           win.webContents.send('perssua:chat-error', `Falha na captura de tela: ${err.message}`)
         }
@@ -216,6 +267,8 @@ export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
       role: 'user',
       content: userMessageContent,
       timestamp: Date.now(),
+      origin: 'quick-action',
+      detectedQuestion: detectedQuestionText,
       hasScreenContext: shouldCaptureScreen
     }
     chatHistory.push(userMessage)
@@ -225,36 +278,52 @@ export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
       win.webContents.send('perssua:user-message', userMessage)
     }
 
+    const contextResult = contextService.composeContext(prompt, {
+      chatHistory,
+      attachScreen: shouldCaptureScreen,
+      forSummarize: action === 'summarize',
+      detectedQuestion: detectedQuestionText
+    })
+
     try {
       const fullResponse = await geminiProvider.generateContentStream({
-        prompt: contextService.composePrompt(prompt, chatHistory),
+        prompt: contextResult.prompt,
         imageBase64: screenImageBase64,
         mimeType,
+        signal: abortController.signal,
         onChunk: (chunk) => {
-          if (win && !win.isDestroyed()) {
+          if (generationCoordinator.isJobActive(requestId, currentSessionId) && win && !win.isDestroyed()) {
             win.webContents.send('perssua:chat-chunk', chunk)
           }
         }
       })
 
-      const assistantMessage: ChatMessage = {
-        id: `ast_${Date.now()}`,
-        role: 'assistant',
-        content: fullResponse,
-        timestamp: Date.now()
-      }
-      chatHistory.push(assistantMessage)
+      if (generationCoordinator.isJobActive(requestId, currentSessionId)) {
+        const assistantMessage: ChatMessage = {
+          id: `ast_${Date.now()}`,
+          role: 'assistant',
+          content: fullResponse,
+          timestamp: Date.now(),
+          origin: 'quick-action'
+        }
+        chatHistory.push(assistantMessage)
 
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-done', assistantMessage)
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('perssua:chat-done', assistantMessage)
+        }
       }
     } catch (err: any) {
-      console.error(`[QuickAction] Erro na geração do Gemini: ${err.message}`)
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('perssua:chat-error', err.message || 'Erro inesperado na geração.')
+      if (!abortController.signal.aborted) {
+        console.error(`[QuickAction] Erro na geração do Gemini: ${err.message}`)
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('perssua:chat-error', err.message || 'Erro inesperado na geração.')
+        }
       }
     } finally {
-      overlayService.updateState({ isGeneratingResponse: false })
+      generationCoordinator.release(requestId)
+      if (!generationCoordinator.isGenerating()) {
+        overlayService.updateState({ isGeneratingResponse: false })
+      }
     }
   }
 
@@ -302,6 +371,9 @@ export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
           autoAssistService.stop()
         }
       }
+      if (settings.screenShareProtection !== undefined) {
+        overlayService.setContentProtectionEnabled(Boolean(settings.screenShareProtection))
+      }
       return { success: shortcutResult.success, conflicts: shortcutResult.conflicts }
     } catch (err: any) {
       return { success: false, error: err.message }
@@ -325,6 +397,10 @@ export function registerIpcHandlers(services: AppServices): IpcHandlersResult {
   // Transcrição e Audio Worker
   ipcMain.handle('perssua:toggle-transcription', () => {
     overlayService.toggleTranscription()
+    const state = overlayService.getState()
+    if (state.isAudioCapturing && state.whisperServerStatus === 'stopped') {
+      transcriptionService.startWhisperServer()
+    }
   })
 
   ipcMain.handle('perssua:clear-transcript', () => {

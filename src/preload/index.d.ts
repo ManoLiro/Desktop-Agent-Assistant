@@ -1,5 +1,6 @@
 export interface TranscriptSegment {
   id: string
+  sequenceNumber: number
   timestamp: number
   source: 'Áudio do sistema' | 'Microfone'
   text: string
@@ -11,6 +12,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: number
+  origin?: 'manual' | 'quick-action' | 'auto-assist'
+  detectedQuestion?: string
   hasScreenContext?: boolean
   error?: boolean
 }
@@ -25,6 +28,8 @@ export interface AppSettings {
   autoAssistEnabled: boolean
   autoAssistIntervalSeconds: number
   includeNotesInContext: boolean
+  /** true = janela invisível em compartilhamentos/gravações de tela (padrão) */
+  screenShareProtection: boolean
   shortcuts: Record<string, string>
 }
 

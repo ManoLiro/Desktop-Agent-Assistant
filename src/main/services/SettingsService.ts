@@ -52,6 +52,7 @@ export class SettingsService {
       autoAssistEnabled: false,
       autoAssistIntervalSeconds: 30,
       includeNotesInContext: true,
+      screenShareProtection: true,
       shortcuts: { ...DEFAULT_SHORTCUTS }
     }
 

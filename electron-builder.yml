@@ -8,11 +8,20 @@ files:
   - package.json
 win:
   target:
-    - nsis
-    - portable
-  artifactName: ${productName}-Setup-${version}.${ext}
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Perssua
+  artifactName: ${productName}-Setup-${version}.${ext}
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}

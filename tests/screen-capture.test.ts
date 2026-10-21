@@ -37,7 +37,10 @@ describe('ScreenCaptureService - Visão Computacional Sob Demanda', () => {
 
     mockOverlayService = {
       getMainWindow: vi.fn().mockReturnValue(mockMainWindow),
-      getState: vi.fn().mockReturnValue({ isPanelVisible: true } as any)
+      getState: vi.fn().mockReturnValue({ isPanelVisible: true } as any),
+      // Por padrão simula proteção NÃO confirmada (fallback com hide/show)
+      ensureContentProtection: vi.fn().mockReturnValue(false),
+      restoreWithoutFocus: vi.fn()
     }
 
     mockSettingsService = {
@@ -89,9 +92,8 @@ describe('ScreenCaptureService - Visão Computacional Sob Demanda', () => {
         thumbnailSize: { width: 1920, height: 1080 }
       })
     )
-    // 3. Restaurou a janela no bloco finally
-    expect(mockMainWindow.show).toHaveBeenCalledTimes(1)
-    expect(mockMainWindow.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver')
+    // 3. Restaurou a janela no bloco finally (reaplicando a proteção via OverlayService)
+    expect(mockOverlayService.restoreWithoutFocus).toHaveBeenCalledTimes(1)
 
     // 4. Retornou os dados em Base64 e JPEG
     expect(result.mimeType).toBe('image/jpeg')
@@ -123,7 +125,31 @@ describe('ScreenCaptureService - Visão Computacional Sob Demanda', () => {
 
     // Como está em outro monitor, não deve piscar nem ocultar
     expect(mockMainWindow.hide).not.toHaveBeenCalled()
-    expect(mockMainWindow.show).not.toHaveBeenCalled()
+    expect(mockOverlayService.restoreWithoutFocus).not.toHaveBeenCalled()
+  })
+
+  it('não deve ocultar a janela quando ela já está excluída da captura (WDA_EXCLUDEFROMCAPTURE)', async () => {
+    vi.mocked(mockOverlayService.ensureContentProtection!).mockReturnValue(true)
+
+    const mockThumbnail = {
+      isEmpty: vi.fn().mockReturnValue(false),
+      getSize: vi.fn().mockReturnValue({ width: 1920, height: 1080 }),
+      toJPEG: vi.fn().mockReturnValue(Buffer.from('fake-jpeg-data'))
+    }
+
+    vi.mocked(desktopCapturer.getSources).mockResolvedValueOnce([
+      {
+        id: 'screen:0:0',
+        name: 'Screen 1',
+        display_id: '1',
+        thumbnail: mockThumbnail as any
+      } as any
+    ])
+
+    await service.captureScreen()
+
+    expect(mockMainWindow.hide).not.toHaveBeenCalled()
+    expect(mockOverlayService.restoreWithoutFocus).not.toHaveBeenCalled()
   })
 
   it('deve restaurar a janela no finally mesmo se desktopCapturer lançar erro', async () => {
@@ -136,6 +162,6 @@ describe('ScreenCaptureService - Visão Computacional Sob Demanda', () => {
     )
 
     // Garante que o bloco finally restaurou a janela
-    expect(mockMainWindow.show).toHaveBeenCalledTimes(1)
+    expect(mockOverlayService.restoreWithoutFocus).toHaveBeenCalledTimes(1)
   })
 })

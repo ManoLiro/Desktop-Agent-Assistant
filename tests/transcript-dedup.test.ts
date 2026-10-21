@@ -1,52 +1,72 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { TranscriptionService } from '../src/main/services/TranscriptionService'
 
-// Função pura que espelha a lógica do TranscriptionService para teste unitário
-function deduplicateOverlap(previousText: string, newText: string): string {
-  const prevWords = previousText.trim().split(/\s+/).filter(Boolean)
-  const newWords = newText.trim().split(/\s+/).filter(Boolean)
+describe('Deduplicação de Overlap de Transcrição (TranscriptionService)', () => {
+  const mockSettings = {
+    getSettings: vi.fn().mockReturnValue({
+      whisperBinaryPath: '',
+      whisperModelPath: '',
+      transcriptionLanguage: 'pt'
+    })
+  } as any
 
-  if (prevWords.length === 0 || newWords.length === 0) {
-    return newText
-  }
+  const mockOverlay = {
+    updateState: vi.fn(),
+    getState: vi.fn().mockReturnValue({ isAudioCapturing: true }),
+    getMainWindow: vi.fn()
+  } as any
 
-  const maxCheck = Math.min(8, prevWords.length, newWords.length)
-  for (let len = maxCheck; len >= 2; len--) {
-    const prevTail = prevWords.slice(-len).join(' ').toLowerCase()
-    const newHead = newWords.slice(0, len).join(' ').toLowerCase()
-    if (prevTail === newHead) {
-      return newWords.slice(len).join(' ')
-    }
-  }
+  const service = new TranscriptionService(mockSettings, mockOverlay)
 
-  return newText
-}
-
-describe('Deduplicação de Overlap de Transcrição', () => {
   it('remove palavras duplicadas quando há sobreposição no início do novo bloco', () => {
     const prev = 'Olá pessoal, sejam bem-vindos à nossa reunião'
     const next = 'à nossa reunião de planejamento do projeto Perssua'
-    const result = deduplicateOverlap(prev, next)
+    const result = service.deduplicateOverlap(prev, next)
     expect(result).toBe('de planejamento do projeto Perssua')
   })
 
   it('mantém o texto original intacto quando não há sobreposição', () => {
     const prev = 'Discutimos o primeiro ponto da pauta.'
     const next = 'Agora vamos falar sobre a arquitetura do Electron.'
-    const result = deduplicateOverlap(prev, next)
+    const result = service.deduplicateOverlap(prev, next)
     expect(result).toBe('Agora vamos falar sobre a arquitetura do Electron.')
   })
 
-  it('trata pontuação ou maiúsculas/minúsculas de forma insensível', () => {
-    const prev = 'precisamos validar o loopback de áudio'
-    const next = 'Loopback de áudio no Windows 11'
-    const result = deduplicateOverlap(prev, next)
-    expect(result).toBe('no Windows 11')
+  it('remove sobreposição mesmo quando há pontuações no fim das palavras ou maiúsculas distintas', () => {
+    const prev = 'precisamos validar o loopback de áudio,'
+    const next = 'Loopback de áudio no Windows 11.'
+    const result = service.deduplicateOverlap(prev, next)
+    expect(result).toBe('no Windows 11.')
   })
 
   it('não corta palavras se a sobreposição for de apenas 1 palavra curta (evita falso positivo)', () => {
     const prev = 'Eu acho que o código está bom'
     const next = 'bom dia para todos'
-    const result = deduplicateOverlap(prev, next)
+    const result = service.deduplicateOverlap(prev, next)
     expect(result).toBe('bom dia para todos')
+  })
+
+  it('suporta pontuações complexas como exclamações, aspas e reticências', () => {
+    const prev = 'Vamos em frente com o "sprint"!'
+    const next = 'com o "sprint"!... Começando pelas tarefas.'
+    const result = service.deduplicateOverlap(prev, next)
+    expect(result).toBe('Começando pelas tarefas.')
+  })
+
+  it('retorna texto novo intacto se o texto anterior for vazio ou apenas espaços', () => {
+    expect(service.deduplicateOverlap('', 'Início da conversa.')).toBe('Início da conversa.')
+    expect(service.deduplicateOverlap('   ', 'Início da conversa.')).toBe('Início da conversa.')
+  })
+
+  it('retorna vazio se o novo texto for vazio ou apenas espaços', () => {
+    expect(service.deduplicateOverlap('Texto anterior', '')).toBe('')
+    expect(service.deduplicateOverlap('Texto anterior', '   ')).toBe('')
+  })
+
+  it('suporta sobreposição longa de até 10 palavras consecutivas', () => {
+    const prev = 'um dois três quatro cinco seis sete oito nove dez onze doze'
+    const next = 'três quatro cinco seis sete oito nove dez onze doze treze catorze'
+    const result = service.deduplicateOverlap(prev, next)
+    expect(result).toBe('treze catorze')
   })
 })

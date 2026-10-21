@@ -8,6 +8,7 @@ import { ScreenCaptureService } from './services/ScreenCaptureService'
 import { TranscriptionService } from './services/TranscriptionService'
 import { ContextService } from './services/ContextService'
 import { AutoAssistService } from './services/AutoAssistService'
+import { GenerationCoordinator } from './services/GenerationCoordinator'
 import { registerIpcHandlers, type QuickActionType } from './ipc/registerIpcHandlers'
 
 // Garante instância única
@@ -15,6 +16,10 @@ const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 }
+
+// Habilita captura de tela e áudio do sistema para workers de mídia em segundo plano
+app.commandLine.appendSwitch('enable-user-media-screen-capturing')
+app.commandLine.appendSwitch('auto-select-desktop-capture-source', 'Entire Screen')
 
 import { appLifecycle } from './lifecycle'
 
@@ -27,6 +32,7 @@ let screenCaptureService: ScreenCaptureService
 let transcriptionService: TranscriptionService
 let contextService: ContextService
 let autoAssistService: AutoAssistService
+let generationCoordinator: GenerationCoordinator
 
 async function initApp(): Promise<void> {
   settingsService = new SettingsService()
@@ -36,12 +42,14 @@ async function initApp(): Promise<void> {
   screenCaptureService = new ScreenCaptureService(overlayService, settingsService)
   transcriptionService = new TranscriptionService(settingsService, overlayService)
   contextService = new ContextService(settingsService, transcriptionService)
+  generationCoordinator = new GenerationCoordinator()
   autoAssistService = new AutoAssistService(
     settingsService,
     overlayService,
     transcriptionService,
     contextService,
-    geminiProvider
+    geminiProvider,
+    generationCoordinator
   )
 
   let executeQuickAction: (action: QuickActionType) => Promise<void> = async () => {}
@@ -78,6 +86,7 @@ async function initApp(): Promise<void> {
     },
     onPanicStop: () => {
       // Interromper captura e requisições; ocultar painel
+      generationCoordinator.cancelCurrent()
       geminiProvider.cancelCurrentGeneration()
       overlayService.setAssistantActive(false)
       overlayService.hidePanel()
@@ -93,7 +102,8 @@ async function initApp(): Promise<void> {
     screenCaptureService,
     transcriptionService,
     contextService,
-    autoAssistService
+    autoAssistService,
+    generationCoordinator
   })
   executeQuickAction = ipcResult.executeQuickAction
 

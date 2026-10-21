@@ -11,12 +11,15 @@
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "build:win": "npm run build && electron-builder --win",
+    "build:win:nsis": "npm run build && electron-builder --win nsis",
+    "build:win:portable": "npm run build && electron-builder --win portable",
     "test": "vitest run"
   },
   "dependencies": {
     "@google/genai": "^2.28.0",
     "clsx": "^2.1.1",
     "katex": "^0.19.0",
+    "koffi": "^2.16.3",
     "lucide-react": "^0.468.0",
     "react-markdown": "^10.1.0",
     "rehype-katex": "^7.0.1",

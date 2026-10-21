@@ -33,9 +33,12 @@ export class ScreenCaptureService {
       }
     }
 
-    // 2. Fluxo inteligente: verifica se a janela do Perssua está visível E sobrepõe o monitor alvo
+    // 2. Fluxo inteligente: se a janela já está excluída da captura (WDA_EXCLUDEFROMCAPTURE),
+    // ela não aparece na imagem e não precisa ser ocultada (hide/show pode resetar a proteção).
+    // Caso contrário, oculta apenas se estiver visível E sobrepuser o monitor alvo.
+    const isExcludedFromCapture = this.overlayService.ensureContentProtection('pre-screen-capture')
     let shouldHideAndRestore = false
-    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+    if (!isExcludedFromCapture && mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
       const winBounds = mainWindow.getBounds()
       const dBounds = targetDisplay.bounds
 
@@ -124,8 +127,7 @@ export class ScreenCaptureService {
       if (shouldHideAndRestore && mainWindow && !mainWindow.isDestroyed()) {
         const state = this.overlayService.getState()
         if (state.isPanelVisible) {
-          mainWindow.show()
-          mainWindow.setAlwaysOnTop(true, 'screen-saver')
+          this.overlayService.restoreWithoutFocus()
         }
       }
     }

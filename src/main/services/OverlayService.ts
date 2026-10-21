@@ -4,12 +4,21 @@ import * as fs from 'fs'
 import { appLifecycle } from '../lifecycle'
 import type { SettingsService, WindowBounds } from './SettingsService'
 import type { PerssuaState } from '../../preload/index.d'
+import {
+  applyExcludeFromCapture,
+  describeAffinity,
+  readProtection,
+  removeExcludeFromCapture
+} from './ContentProtection'
+
+const PROTECTION_WATCHDOG_MS = 500
 
 export class OverlayService {
   private mainWindow: BrowserWindow | null = null
   private audioWorkerWindow: BrowserWindow | null = null
   private settingsService: SettingsService
   private onStateChangeCallback?: (state: PerssuaState) => void
+  private protectionWatchdog: NodeJS.Timeout | null = null
 
   private getPreloadPath(): string {
     const candidates = [
@@ -103,13 +112,19 @@ export class OverlayService {
     })
 
     // Ativa proteção de conteúdo antes da exibição (WDA_EXCLUDEFROMCAPTURE)
-    try {
-      this.mainWindow.setContentProtection(true)
-      console.log('[OverlayService] setContentProtection(true) aplicado com sucesso.')
-    } catch (err) {
-      console.warn('[OverlayService] Falha ao configurar setContentProtection:', err)
-      this.state.contentProtectionStatus = 'Proteção indisponível neste ambiente'
+    this.ensureContentProtection('create')
+
+    // O Electron/Chromium pode resetar a afinidade em transições de janela; reaplica sempre
+    const reapply = (reason: string) => (): void => {
+      this.ensureContentProtection(reason)
     }
+    this.mainWindow.on('show', reapply('show'))
+    this.mainWindow.on('restore', reapply('restore'))
+    this.mainWindow.on('focus', reapply('focus'))
+    this.mainWindow.on('always-on-top-changed', reapply('always-on-top-changed'))
+    this.mainWindow.webContents.on('did-finish-load', reapply('did-finish-load'))
+    this.mainWindow.on('closed', () => this.stopProtectionWatchdog())
+    this.startProtectionWatchdog()
 
     // Salvar posição ao mover/redimensionar
     const handleBoundsUpdate = (): void => {
@@ -164,6 +179,14 @@ export class OverlayService {
       }
     })
 
+    this.audioWorkerWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      console.log(`[AudioWorkerWindow] [lvl ${level}] ${message} (${sourceId}:${line})`)
+    })
+
+    this.audioWorkerWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      console.error(`[AudioWorkerWindow] Falha ao carregar: ${errorCode} - ${errorDescription}`)
+    })
+
     if (process.env['ELECTRON_RENDERER_URL']) {
       this.audioWorkerWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/audio-worker.html`)
     } else {
@@ -174,11 +197,27 @@ export class OverlayService {
   }
 
   private setupDisplayMediaHandler(): void {
+    // Permite captura de tela e mídia sem exibir diálogos de permissão bloqueantes
+    session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+      if (permission === 'media' || permission === 'display-capture') {
+        console.log(`[OverlayService] Concedendo permissão: ${permission}`)
+        callback(true)
+        return
+      }
+      callback(false)
+    })
+
     // Intercepta getDisplayMedia para fornecer áudio loopback do sistema no Windows
     session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
+      console.log('[OverlayService] Recebeu solicitação em setDisplayMediaRequestHandler')
       try {
-        const sources = await desktopCapturer.getSources({ types: ['screen'] })
+        const sources = await desktopCapturer.getSources({
+          types: ['screen', 'window'],
+          thumbnailSize: { width: 0, height: 0 }
+        })
+        console.log(`[OverlayService] Fontes detectadas: ${sources.length}`, sources.map((s) => s.name))
         if (sources.length > 0) {
+          console.log('[OverlayService] Autorizando áudio loopback do sistema com fonte:', sources[0].name)
           callback({ video: sources[0], audio: 'loopback' })
           return
         }
@@ -189,15 +228,86 @@ export class OverlayService {
     })
   }
 
+  /** Proteção habilitada nas configurações (padrão: true). */
+  public isContentProtectionEnabled(): boolean {
+    return this.settingsService.getSettings().screenShareProtection !== false
+  }
+
+  /** Liga/desliga a invisibilidade no compartilhamento de tela imediatamente. */
+  public setContentProtectionEnabled(enabled: boolean): void {
+    console.log(`[OverlayService] Proteção de captura ${enabled ? 'habilitada' : 'desabilitada'} pelo usuário.`)
+    this.ensureContentProtection(enabled ? 'user-enabled' : 'user-disabled')
+  }
+
+  /**
+   * Aplica o estado de proteção configurado na janela principal e atualiza o status.
+   * Retorna true quando a janela está confirmadamente excluída da captura pelo SO.
+   */
+  public ensureContentProtection(reason: string): boolean {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return false
+
+    let status: string
+    let excluded = false
+
+    if (this.isContentProtectionEnabled()) {
+      const result = applyExcludeFromCapture(this.mainWindow)
+      excluded = result.excluded
+      status = !result.nativeAvailable
+        ? 'Proteção ativada (não verificada)'
+        : result.excluded
+          ? 'Invisível no compartilhamento de tela'
+          : `Falha na proteção (${describeAffinity(result.affinity)})`
+    } else {
+      removeExcludeFromCapture(this.mainWindow)
+      status = 'Visível no compartilhamento de tela'
+    }
+
+    if (status !== this.state.contentProtectionStatus) {
+      console.log(`[OverlayService] Proteção de captura (${reason}): ${status}`)
+      this.updateState({ contentProtectionStatus: status })
+    }
+    return excluded
+  }
+
+  /** Verifica periodicamente se a afinidade foi resetada e corrige imediatamente. */
+  private startProtectionWatchdog(): void {
+    this.stopProtectionWatchdog()
+    this.protectionWatchdog = setInterval(() => {
+      if (!this.mainWindow || this.mainWindow.isDestroyed() || !this.mainWindow.isVisible()) return
+      if (!this.isContentProtectionEnabled()) return
+      const current = readProtection(this.mainWindow)
+      if (current.nativeAvailable && !current.excluded) {
+        console.warn(
+          `[OverlayService] Afinidade resetada para ${describeAffinity(current.affinity)}; reaplicando proteção.`
+        )
+        this.ensureContentProtection('watchdog')
+      }
+    }, PROTECTION_WATCHDOG_MS)
+  }
+
+  private stopProtectionWatchdog(): void {
+    if (this.protectionWatchdog) {
+      clearInterval(this.protectionWatchdog)
+      this.protectionWatchdog = null
+    }
+  }
+
+  /** Reexibe a janela sem roubar foco (usado após captura de tela), reaplicando a proteção. */
+  public restoreWithoutFocus(): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.ensureContentProtection('restore-before-show')
+      this.mainWindow.showInactive()
+      this.mainWindow.setAlwaysOnTop(true, 'screen-saver')
+      this.ensureContentProtection('restore-after-show')
+    }
+  }
+
   public showPanel(): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      try {
-        this.mainWindow.setContentProtection(true)
-      } catch (err) {
-        console.warn('[OverlayService] Erro ao reaplicar proteção em showPanel:', err)
-      }
+      this.ensureContentProtection('show-before')
       this.mainWindow.show()
       this.mainWindow.setAlwaysOnTop(true, 'screen-saver')
+      this.ensureContentProtection('show-after')
       this.mainWindow.focus()
       this.updateState({ isPanelVisible: true })
     }
@@ -223,10 +333,13 @@ export class OverlayService {
   public setPanelMode(mode: 'edit' | 'query'): void {
     this.updateState({ panelMode: mode })
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      // setIgnoreMouseEvents altera WS_EX_LAYERED/WS_EX_TRANSPARENT; reaplica a proteção em seguida
       if (mode === 'query') {
         this.mainWindow.setIgnoreMouseEvents(true, { forward: true })
+        this.ensureContentProtection('click-through-on')
       } else {
         this.mainWindow.setIgnoreMouseEvents(false)
+        this.ensureContentProtection('click-through-off')
         this.mainWindow.focus()
       }
     }
@@ -254,16 +367,24 @@ export class OverlayService {
 
   public startAudioCaptureWorker(): void {
     if (this.audioWorkerWindow && !this.audioWorkerWindow.isDestroyed()) {
-      this.audioWorkerWindow.webContents.send('perssua:audio-worker-command', { action: 'start' })
-      this.updateState({ isAudioCapturing: true, isTranscribing: true })
+      if (this.audioWorkerWindow.webContents.isLoading()) {
+        this.audioWorkerWindow.webContents.once('did-finish-load', () => {
+          if (this.audioWorkerWindow && !this.audioWorkerWindow.isDestroyed()) {
+            this.audioWorkerWindow.webContents.send('perssua:audio-worker-command', { action: 'start' })
+          }
+        })
+      } else {
+        this.audioWorkerWindow.webContents.send('perssua:audio-worker-command', { action: 'start' })
+      }
     }
+    this.updateState({ isAudioCapturing: true, isTranscribing: true })
   }
 
   public stopAudioCaptureWorker(): void {
     if (this.audioWorkerWindow && !this.audioWorkerWindow.isDestroyed()) {
       this.audioWorkerWindow.webContents.send('perssua:audio-worker-command', { action: 'stop' })
-      this.updateState({ isAudioCapturing: false, isTranscribing: false })
     }
+    this.updateState({ isAudioCapturing: false, isTranscribing: false })
   }
 
   public toggleTranscription(): void {

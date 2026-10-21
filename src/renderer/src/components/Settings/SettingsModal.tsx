@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import type { AppSettings } from '@preload/index.d'
-import { X, Key, Shield, Cpu, Sparkles, Sliders, Check, Monitor } from 'lucide-react'
+import { X, Key, Shield, Cpu, Sparkles, Sliders, Check, Monitor, Eye, EyeOff } from 'lucide-react'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -111,6 +111,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="p-4 flex-1 overflow-y-auto space-y-4 text-xs">
           {activeTab === 'general' && (
             <>
+              {/* Proteção contra compartilhamento de tela */}
+              {(() => {
+                const protectionOn = settings.screenShareProtection !== false
+                return (
+                  <div
+                    className={`space-y-1.5 p-3 rounded-lg border transition-colors ${
+                      protectionOn
+                        ? 'bg-background border-border/70'
+                        : 'bg-amber-500/5 border-amber-500/40'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <label
+                        htmlFor="toggle-screen-share-protection"
+                        className="font-semibold text-slate-200 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Shield className={`w-3.5 h-3.5 ${protectionOn ? 'text-accent' : 'text-amber-400'}`} />
+                        <span>Invisível no compartilhamento de tela</span>
+                      </label>
+                      <button
+                        id="toggle-screen-share-protection"
+                        type="button"
+                        role="switch"
+                        aria-checked={protectionOn}
+                        onClick={() => handleUpdateSetting('screenShareProtection', !protectionOn)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
+                          protectionOn ? 'bg-accent' : 'bg-border'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                            protectionOn ? 'translate-x-[18px]' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-muted leading-tight flex items-start gap-1.5">
+                      {protectionOn ? (
+                        <>
+                          <EyeOff className="w-3 h-3 mt-px shrink-0 text-success" />
+                          <span>
+                            O Perssua não aparece no Meet, Teams, Zoom, gravadores ou prints. Só você vê a janela.
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3 h-3 mt-px shrink-0 text-amber-400" />
+                          <span className="text-amber-300">
+                            Proteção desligada: quem estiver vendo seu compartilhamento de tela verá o Perssua.
+                          </span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                )
+              })()}
+
               {/* API Key do Gemini */}
               <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border/70">
                 <div className="flex items-center justify-between">

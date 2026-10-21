@@ -126,9 +126,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
               }`}
             >
               <div className="flex items-center justify-between gap-4 mb-1">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-                  {msg.role === 'user' ? 'Você' : 'Perssua'}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                    {msg.role === 'user' ? 'Você' : 'Perssua'}
+                  </span>
+                  {msg.origin === 'auto-assist' && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium select-none">
+                      ⚡ Atualização Automática
+                    </span>
+                  )}
+                </div>
 
                 {msg.role === 'assistant' && (
                   <button
@@ -144,6 +151,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   </button>
                 )}
               </div>
+
+              {msg.detectedQuestion && (
+                <div className="mb-2 p-1.5 rounded bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200 font-normal">
+                  <span className="font-semibold text-amber-300">🎯 Identificada na transcrição: </span>
+                  <span className="italic">&quot;{msg.detectedQuestion}&quot;</span>
+                </div>
+              )}
 
               {msg.role === 'user' ? (
                 <div className="whitespace-pre-wrap select-text font-normal">

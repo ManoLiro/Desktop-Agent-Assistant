@@ -102,7 +102,8 @@ export class GeminiProvider {
             input,
             tools,
             generation_config: generationConfig as any,
-            system_instruction: systemPrompt
+            system_instruction: systemPrompt,
+            store: false
           },
           {
             fetchOptions: { signal }

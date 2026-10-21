@@ -1,84 +1,141 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { OverlayService } from '../src/main/services/OverlayService'
+import type { PerssuaState } from '../src/preload/index.d'
 
-interface AppState {
-  isAssistantActive: boolean
-  isPanelVisible: boolean
-  isAudioCapturing: boolean
-  isGeneratingResponse: boolean
-  notesContent: string
-}
+describe('Máquina de Estados e Transições do Assistente (OverlayService)', () => {
+  let mockSettings: any
+  let overlayService: OverlayService
 
-class AssistantStateMachine {
-  public state: AppState = {
-    isAssistantActive: false, // Inicia desativado
-    isPanelVisible: true,
-    isAudioCapturing: false,
-    isGeneratingResponse: false,
-    notesContent: 'Notas existentes do usuário'
-  }
-
-  public setAssistantActive(active: boolean, onCancelGen?: () => void, onStopAudio?: () => void): void {
-    this.state.isAssistantActive = active
-
-    if (!active) {
-      // Regra do MVP: Desativar encerra tracks, cancela solicitações e limpa filas. Não apaga notas!
-      this.state.isAudioCapturing = false
-      this.state.isGeneratingResponse = false
-      onCancelGen?.()
-      onStopAudio?.()
-    } else {
-      this.state.isAudioCapturing = true
+  beforeEach(() => {
+    mockSettings = {
+      hasApiKey: vi.fn().mockReturnValue(true),
+      getBounds: vi.fn().mockReturnValue({ width: 440, height: 640 }),
+      saveBounds: vi.fn(),
+      getNotes: vi.fn().mockReturnValue('# Anotações importantes do usuário'),
+      saveNotes: vi.fn()
     }
-  }
 
-  public togglePanelVisibility(): void {
-    // Regra do MVP: Mostrar/ocultar painel altera apenas a visibilidade; sessão de áudio já iniciada continua.
-    this.state.isPanelVisible = !this.state.isPanelVisible
-  }
-}
-
-describe('Máquina de Estados do Perssua', () => {
-  it('inicia no estado desativado por padrão', () => {
-    const sm = new AssistantStateMachine()
-    expect(sm.state.isAssistantActive).toBe(false)
-    expect(sm.state.isAudioCapturing).toBe(false)
+    overlayService = new OverlayService(mockSettings)
   })
 
-  it('ao desativar o assistente, encerra captura e cancela geração, mas preserva notas', () => {
-    const sm = new AssistantStateMachine()
-    const cancelSpy = vi.fn()
-    const stopAudioSpy = vi.fn()
+  it('1. Estado Inicial: inicia no modo Inativo e editável', () => {
+    const state = overlayService.getState()
+    expect(state.isAssistantActive).toBe(false)
+    expect(state.isAudioCapturing).toBe(false)
+    expect(state.isTranscribing).toBe(false)
+    expect(state.isGeneratingResponse).toBe(false)
+    expect(state.isPanelVisible).toBe(true)
+    expect(state.panelMode).toBe('edit')
+    expect(state.whisperServerStatus).toBe('stopped')
+    expect(state.hasApiKey).toBe(true)
+  })
 
-    // Ativa
-    sm.setAssistantActive(true)
-    expect(sm.state.isAssistantActive).toBe(true)
-    expect(sm.state.isAudioCapturing).toBe(true)
+  it('2. Transição Inativo -> Ativo: ativa assistente e inicia worker de áudio', () => {
+    const startAudioSpy = vi.spyOn(overlayService, 'startAudioCaptureWorker').mockImplementation(() => {})
 
-    // Simula geração em andamento
-    sm.state.isGeneratingResponse = true
+    overlayService.setAssistantActive(true)
 
-    // Desativa
-    sm.setAssistantActive(false, cancelSpy, stopAudioSpy)
-    expect(sm.state.isAssistantActive).toBe(false)
-    expect(sm.state.isAudioCapturing).toBe(false)
-    expect(sm.state.isGeneratingResponse).toBe(false)
-    expect(cancelSpy).toHaveBeenCalledOnce()
+    const state = overlayService.getState()
+    expect(state.isAssistantActive).toBe(true)
+    expect(startAudioSpy).toHaveBeenCalledOnce()
+  })
+
+  it('3. Transição Ativo -> Gravando / Transcrevendo: reflete estado de streaming de áudio', () => {
+    overlayService.setAssistantActive(true)
+
+    // Simula confirmação do worker de áudio e whisper-server running
+    overlayService.updateState({
+      isAudioCapturing: true,
+      isTranscribing: true,
+      whisperServerStatus: 'running'
+    })
+
+    const state = overlayService.getState()
+    expect(state.isAssistantActive).toBe(true)
+    expect(state.isAudioCapturing).toBe(true)
+    expect(state.isTranscribing).toBe(true)
+    expect(state.whisperServerStatus).toBe('running')
+  })
+
+  it('4. Transição Gravando -> Pausado (toggleTranscription sem desativar assistente)', () => {
+    overlayService.setAssistantActive(true)
+    overlayService.updateState({ isAudioCapturing: true, isTranscribing: true })
+
+    // Pausa a captura de áudio
+    overlayService.toggleTranscription()
+
+    const state = overlayService.getState()
+    expect(state.isAudioCapturing).toBe(false)
+    // O assistente em si continua ATIVO para chat manual e visão de tela
+    expect(state.isAssistantActive).toBe(true)
+  })
+
+  it('5. Transição Pausado -> Retomado: retoma captura com o assistente já ativo', () => {
+    overlayService.setAssistantActive(true)
+    overlayService.updateState({ isAudioCapturing: false })
+
+    // Retoma a captura
+    overlayService.toggleTranscription()
+
+    const state = overlayService.getState()
+    expect(state.isAudioCapturing).toBe(true)
+    expect(state.isAssistantActive).toBe(true)
+  })
+
+  it('6. Transição Gravando/Ativo -> Encerrando: encerra captura e limpa flags, preservando notas', () => {
+    const stopAudioSpy = vi.spyOn(overlayService, 'stopAudioCaptureWorker').mockImplementation(() => {})
+
+    overlayService.setAssistantActive(true)
+    overlayService.updateState({
+      isAudioCapturing: true,
+      isTranscribing: true,
+      isGeneratingResponse: true
+    })
+
+    // Desativação mestre (ou atalho de pânico)
+    overlayService.setAssistantActive(false)
+
+    const state = overlayService.getState()
+    expect(state.isAssistantActive).toBe(false)
+    expect(state.isAudioCapturing).toBe(false)
+    expect(state.isTranscribing).toBe(false)
+    expect(state.isGeneratingResponse).toBe(false)
     expect(stopAudioSpy).toHaveBeenCalledOnce()
-    // Notas continuam intactas
-    expect(sm.state.notesContent).toBe('Notas existentes do usuário')
+
+    // Valida que as notas do usuário permanecem intactas
+    expect(mockSettings.getNotes()).toBe('# Anotações importantes do usuário')
+    expect(mockSettings.saveNotes).not.toHaveBeenCalled()
   })
 
-  it('ocultar o painel altera apenas visibilidade e preserva captura de áudio ativa', () => {
-    const sm = new AssistantStateMachine()
-    sm.setAssistantActive(true)
-    expect(sm.state.isAudioCapturing).toBe(true)
-    expect(sm.state.isPanelVisible).toBe(true)
+  it('7. Ocultar painel (togglePanelVisibility) altera visibilidade sem interromper áudio em background', () => {
+    overlayService.setAssistantActive(true)
+    overlayService.updateState({ isAudioCapturing: true, isTranscribing: true })
 
-    // Oculta painel
-    sm.togglePanelVisibility()
-    expect(sm.state.isPanelVisible).toBe(false)
-    // Áudio continua capturando!
-    expect(sm.state.isAudioCapturing).toBe(true)
-    expect(sm.state.isAssistantActive).toBe(true)
+    overlayService.updateState({ isPanelVisible: false })
+
+    const state = overlayService.getState()
+    expect(state.isPanelVisible).toBe(false)
+    // A captura de loopback em background NÃO pode ser afetada
+    expect(state.isAudioCapturing).toBe(true)
+    expect(state.isTranscribing).toBe(true)
+    expect(state.isAssistantActive).toBe(true)
+  })
+
+  it('8. Alternar entre modos de painel (edit <-> query)', () => {
+    overlayService.setPanelMode('query')
+    expect(overlayService.getState().panelMode).toBe('query')
+
+    overlayService.setPanelMode('edit')
+    expect(overlayService.getState().panelMode).toBe('edit')
+  })
+
+  it('9. Emite callback de estado sempre que o estado sofrer mutação', () => {
+    const stateCallback = vi.fn()
+    overlayService.setStateCallback(stateCallback)
+
+    overlayService.updateState({ activeTab: 'transcript' })
+    expect(stateCallback).toHaveBeenCalledWith(
+      expect.objectContaining({ activeTab: 'transcript' })
+    )
   })
 })
