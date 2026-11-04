@@ -1,6 +1,6 @@
-# Perssua — Assistente Contextual Desktop (Windows)
+Assistente Contextual Desktop (Windows)
 
-O **Perssua** é um assistente contextual local para Windows (Windows 10 versão 2004+ e Windows 11 x64), desenvolvido como copiloto de alto desempenho para reuniões de trabalho, aulas, programação em par e preparação para entrevistas técnicas.
+Um assistente contextual local para Windows (Windows 10 versão 2004+ e Windows 11 x64), desenvolvido como copiloto de alto desempenho para reuniões de trabalho, aulas, programação em par e preparação para entrevistas técnicas.
 
 O aplicativo opera como um painel flutuante sem bordas com **proteção ativa contra captura acidental de tela** (invisível em compartilhamentos de tela do Zoom, Google Meet, Teams, Discord e OBS Studio), captura de áudio do sistema (_loopback_) processada localmente via **whisper.cpp** e raciocínio multimodal através do SDK oficial do **Google Gemini** (`@google/genai`).
 
@@ -15,7 +15,7 @@ O aplicativo opera como um painel flutuante sem bordas com **proteção ativa co
   - **Orquestração de Contexto (`ContextService`):** Orçamento disciplinado de tokens (~3.8 caracteres/token) com descarte hierárquico nas fronteiras de mensagens, truncamento suave de anotações longas e reconstrução temporal de trechos de fala com limites de duração.
   - **whisper.cpp Local:** Gerenciamento do ciclo de vida de `whisper-server.exe` em `127.0.0.1:8089` com healthcheck ativo, Voice Activity Detection (VAD RMS) e deduplicação inteligente de overlap de áudio.
 - **Processo Preload:**
-  - Bridge fortemente tipada e blindada (`contextBridge.exposeInMainWorld('perssua', ...)`), sem Node genérico ou acesso direto ao SO no Renderer.
+  - Bridge fortemente tipada e blindada (`contextBridge.exposeInMainWorld('*****', ...)`), sem Node genérico ou acesso direto ao SO no Renderer.
 - **Processo Renderer & Janela Oculta de Áudio:**
   - Interface compacta em tema escuro com suporte a Markdown rico e renderização de fórmulas matemáticas KaTeX.
   - Janela secundária em segundo plano (`audio-worker.html`) com `AudioWorklet` nativo em Web Audio API para downsampling contínuo de loopback para 16kHz Mono 16-bit PCM.
@@ -53,7 +53,7 @@ npm run dev
 
 ## 3. Configuração do whisper.cpp (Transcrição Local)
 
-O Perssua não envia áudio do microfone ou da reunião para a nuvem. Toda a transcrição de voz é executada localmente no computador através do **whisper.cpp**.
+O Assistente não envia áudio do microfone ou da reunião para a nuvem. Toda a transcrição de voz é executada localmente no computador através do **whisper.cpp**.
 
 ### 3.1. Download do Binário do Servidor (Windows x64)
 
@@ -75,21 +75,21 @@ Baixe o arquivo de modelo desejado e salve-o em `C:\tools\whisper\models\`:
 | **`ggml-base.bin`**  | ~148 MB | ~500 MB     | ~150–250 ms    | **Recomendado para início rápido.** Excelente velocidade e baixo consumo de CPU.                                       | [Baixar ggml-base.bin](https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin)   |
 | **`ggml-small.bin`** | ~488 MB | ~1.2 GB     | ~400–600 ms    | **Recomendado para entrevistas técnicas.** Maior precisão para termos de programação e inglês misturado com português. | [Baixar ggml-small.bin](https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin) |
 
-### 3.3. Configurar os Caminhos no Perssua
+### 3.3. Configurar os Caminhos no Assistente
 
-1. Abra o Perssua e clique no ícone de engrenagem ⚙️ (no canto superior da barra de navegação).
+1. Abra o Assistente e clique no ícone de engrenagem ⚙️ (no canto superior da barra de navegação).
 2. Acesse a aba **whisper.cpp**.
 3. Preencha os campos com os caminhos absolutos:
    - **Caminho do whisper-server.exe:** `C:\tools\whisper\whisper-server.exe`
    - **Caminho do Modelo ggml-\*.bin:** `C:\tools\whisper\models\ggml-base.bin` (ou `ggml-small.bin`)
-4. Quando você ativar o assistente (`Ctrl+Alt+Space`), o Perssua inicializará o servidor automaticamente em segundo plano.
+4. Quando você ativar o assistente (`Ctrl+Alt+Space`), o Assistente inicializará o servidor automaticamente em segundo plano.
 
 ---
 
 ## 4. Configuração da API Key do Google Gemini
 
 1. Crie uma chave de API gratuita no [Google AI Studio](https://aistudio.google.com/).
-2. No Perssua, abra as Configurações (⚙️) na aba **Geral & IA**.
+2. No Assistente, abra as Configurações (⚙️) na aba **Geral & IA**.
 3. Cole a sua chave no campo e clique em **Salvar**.
 4. Após o salvamento, o campo é limpo e o valor fica armazenado com criptografia DPAPI do Windows via `safeStorage`. Se a criptografia não estiver disponível, a chave não é salva.
 
@@ -129,7 +129,7 @@ Todos os atalhos globais possuem detecção de conflito no Windows e podem ser c
 
 ## 6. Matriz de Testes de Proteção de Captura de Tela
 
-O Perssua utiliza a flag nativa `WDA_EXCLUDEFROMCAPTURE` do Desktop Window Manager (DWM) da Microsoft via `BrowserWindow.setContentProtection(true)`.
+O Assistente utiliza a flag nativa `WDA_EXCLUDEFROMCAPTURE` do Desktop Window Manager (DWM) da Microsoft via `BrowserWindow.setContentProtection(true)`.
 
 ### Tabela de Compatibilidade
 
@@ -137,8 +137,8 @@ O Perssua utiliza a flag nativa `WDA_EXCLUDEFROMCAPTURE` do Desktop Window Manag
 | :----------------------------- | :------------- | :-------------------------- | :----------------------------------- | :--------------------------------------------------------------------- |
 | **OBS Studio**                 | 30.2+          | Captura de Tela (Desktop)   | **Completamente Invisível**          | Janela excluída pelo compositing do DWM.                               |
 | **OBS Studio**                 | 30.2+          | Captura de Janela (BitBlt)  | **Retângulo Preto**                  | Modo legado BitBlt não consegue ler a superfície de vídeo protegida.   |
-| **Google Meet**                | Chrome 131+    | Compartilhar "Tela Inteira" | **Completamente Invisível**          | O participante remoto vê sua área de trabalho sem a janela do Perssua. |
-| **Google Meet**                | Chrome 131+    | Compartilhar "Janela"       | **Não Selecionável**                 | A janela do Perssua é omitida da lista de janelas selecionáveis.       |
+| **Google Meet**                | Chrome 131+    | Compartilhar "Tela Inteira" | **Completamente Invisível**          | O participante remoto vê sua área de trabalho sem a janela do Assistente. |
+| **Google Meet**                | Chrome 131+    | Compartilhar "Janela"       | **Não Selecionável**                 | A janela do Assistente é omitida da lista de janelas selecionáveis.       |
 | **Microsoft Teams**            | Atual (24243+) | Compartilhar Tela Inteira   | **Completamente Invisível**          | Windows Graphics Capture API respeita afinidade de exclusão.           |
 | **Zoom**                       | 6.2+           | Compartilhar Tela Inteira   | **Completamente Invisível**          | Validado no Windows 11 com aceleração de hardware ativa.               |
 | **Discord**                    | Atual          | Compartilhamento de Telas   | **Completamente Invisível**          | Validado em transmissão de tela inteira em 1080p/60fps.                |
@@ -149,13 +149,13 @@ O Perssua utiliza a flag nativa `WDA_EXCLUDEFROMCAPTURE` do Desktop Window Manag
 
 ## 7. Como Gerar o Instalador Windows (Empacotamento)
 
-O Perssua está configurado para gerar tanto o instalador com assistente (**NSIS**) quanto o executável independente (**Portable**) para Windows x64:
+O Assistente está configurado para gerar tanto o instalador com assistente (**NSIS**) quanto o executável independente (**Portable**) para Windows x64:
 
 ```bash
-# 1. Gerar instalador completo NSIS (Perssua-Setup-1.0.0.exe)
+# 1. Gerar instalador completo NSIS (Assistente-Setup-1.0.0.exe)
 npm run build:win:nsis
 
-# 2. Gerar executável independente Portable (Perssua-Portable-1.0.0.exe)
+# 2. Gerar executável independente Portable (Assistente-Portable-1.0.0.exe)
 npm run build:win:portable
 
 # 3. Gerar ambos os formatos de uma única vez
@@ -164,8 +164,8 @@ npm run build:win
 
 Os arquivos compilados serão gerados na pasta `dist/`:
 
-- `dist/Perssua-Setup-1.0.0.exe`: Instalador completo com criação de atalhos e desinstalador limpo.
-- `dist/Perssua-Portable-1.0.0.exe`: Executável portátil para pendrive ou execução direta sem instalação.
+- `dist/Assistente-Setup-1.0.0.exe`: Instalador completo com criação de atalhos e desinstalador limpo.
+- `dist/Assistente-Portable-1.0.0.exe`: Executável portátil para pendrive ou execução direta sem instalação.
 
 ---
 
