@@ -1,4 +1,5 @@
 import { app, safeStorage } from 'electron'
+import { randomUUID } from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
 import type { AppSettings } from '../../preload/index.d'
@@ -128,24 +129,22 @@ export class SettingsService {
   public saveApiKey(key: string): boolean {
     const trimmed = key.trim()
     if (!trimmed) {
-      this.cachedApiKey = null
-      if (fs.existsSync(this.keyFilePath)) {
-        try {
+      try {
+        if (fs.existsSync(this.keyFilePath)) {
           fs.unlinkSync(this.keyFilePath)
-        } catch {}
+        }
+        this.cachedApiKey = null
+        return true
+      } catch (err) {
+        console.error('[SettingsService] Erro ao remover API key:', err)
+        return false
       }
-      return true
     }
 
     try {
-      if (safeStorage.isEncryptionAvailable()) {
-        const encrypted = safeStorage.encryptString(trimmed)
-        fs.writeFileSync(this.keyFilePath, encrypted)
-      } else {
-        // Fallback se safeStorage não estiver disponível no ambiente
-        const encoded = Buffer.from(trimmed).toString('base64')
-        fs.writeFileSync(this.keyFilePath, Buffer.from(encoded, 'utf-8'))
-      }
+      if (!safeStorage.isEncryptionAvailable()) return false
+
+      this.writeEncryptedApiKey(trimmed)
       this.cachedApiKey = trimmed
       return true
     } catch (err) {
@@ -154,20 +153,39 @@ export class SettingsService {
     }
   }
 
+  private writeEncryptedApiKey(key: string): void {
+    const encrypted = safeStorage.encryptString(key)
+    const tempPath = `${this.keyFilePath}.${randomUUID()}.tmp`
+    try {
+      fs.writeFileSync(tempPath, encrypted, { flag: 'wx', mode: 0o600 })
+      fs.renameSync(tempPath, this.keyFilePath)
+    } finally {
+      try {
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath)
+      } catch {}
+    }
+  }
+
   private readApiKeyFromDisk(): string | null {
     try {
-      if (fs.existsSync(this.keyFilePath)) {
-        const buffer = fs.readFileSync(this.keyFilePath)
-        if (safeStorage.isEncryptionAvailable()) {
-          try {
-            return safeStorage.decryptString(buffer)
-          } catch {
-            // Em caso de chave pré-criptografada em base64 simples fallback
-            return Buffer.from(buffer.toString('utf-8'), 'base64').toString('utf-8')
-          }
-        } else {
-          return Buffer.from(buffer.toString('utf-8'), 'base64').toString('utf-8')
+      if (!fs.existsSync(this.keyFilePath) || !safeStorage.isEncryptionAvailable()) return null
+
+      const buffer = fs.readFileSync(this.keyFilePath)
+      try {
+        return safeStorage.decryptString(buffer)
+      } catch {
+        // Migrate keys written in Base64 by older versions only after validating the format.
+        const encoded = buffer.toString('utf-8')
+        if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+          return null
         }
+        const decoded = Buffer.from(encoded, 'base64')
+        const legacyKey = decoded.toString('utf-8')
+        if (decoded.toString('base64') !== encoded || !/^[\x21-\x7e]+$/.test(legacyKey)) {
+          return null
+        }
+        this.writeEncryptedApiKey(legacyKey)
+        return legacyKey
       }
     } catch (err) {
       console.error('[SettingsService] Erro ao descriptografar API key:', err)

@@ -45,7 +45,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       onSettingsSaved()
       setTimeout(() => setKeySavedStatus(null), 3000)
     } else {
-      setKeySavedStatus('Erro ao salvar chave.')
+      setKeySavedStatus('Não foi possível salvar a chave. Verifique se a criptografia do sistema está disponível.')
     }
   }
 

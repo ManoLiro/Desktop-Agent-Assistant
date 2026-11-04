@@ -10,7 +10,7 @@ O aplicativo opera como um painel flutuante sem bordas com **proteção ativa co
 
 - **Processo Principal (Electron Main):**
   - **Proteção DWM de Tela:** Aplicação de `BrowserWindow.setContentProtection(true)` com afinidade nativa `WDA_EXCLUDEFROMCAPTURE` antes da exibição de qualquer superfície de janela.
-  - **Segurança de Chaves:** Credenciais do Gemini criptografadas com `safeStorage` (DPAPI nativa do Windows). A chave nunca é exposta em logs, bundles ou no renderer.
+  - **Segurança de Chaves:** A chave do Gemini é informada na interface e enviada ao processo principal, que só a salva quando a criptografia do sistema está disponível por meio do `safeStorage` (DPAPI no Windows).
   - **Coordenador de Requisições (`GenerationCoordinator`):** Gerenciamento síncrono de concorrência com **preempção imediata**: pedidos manuais do usuário cancelam automaticamente tarefas em segundo plano do `AutoAssist`, evitando bloqueios.
   - **Orquestração de Contexto (`ContextService`):** Orçamento disciplinado de tokens (~3.8 caracteres/token) com descarte hierárquico nas fronteiras de mensagens, truncamento suave de anotações longas e reconstrução temporal de trechos de fala com limites de duração.
   - **whisper.cpp Local:** Gerenciamento do ciclo de vida de `whisper-server.exe` em `127.0.0.1:8089` com healthcheck ativo, Voice Activity Detection (VAD RMS) e deduplicação inteligente de overlap de áudio.
@@ -33,12 +33,13 @@ O aplicativo opera como um painel flutuante sem bordas com **proteção ativa co
 
 ```bash
 # 1. Clonar o repositório e entrar na pasta
-cd InterviewHack
+git clone https://github.com/ManoLiro/Desktop-Agent-Assistant.git
+cd Desktop-Agent-Assistant
 
 # 2. Instalar as dependências do projeto
 npm install
 
-# 3. Executar a suíte de testes automatizados (58 testes)
+# 3. Executar a suíte de testes automatizados
 npm test
 
 # 4. Validar tipagem TypeScript estrita (Node + Web)
@@ -90,7 +91,9 @@ Baixe o arquivo de modelo desejado e salve-o em `C:\tools\whisper\models\`:
 1. Crie uma chave de API gratuita no [Google AI Studio](https://aistudio.google.com/).
 2. No Perssua, abra as Configurações (⚙️) na aba **Geral & IA**.
 3. Cole a sua chave no campo e clique em **Salvar**.
-4. O campo é limpo imediatamente da tela e o valor é armazenado com criptografia DPAPI do Windows via `safeStorage`.
+4. Após o salvamento, o campo é limpo e o valor fica armazenado com criptografia DPAPI do Windows via `safeStorage`. Se a criptografia não estiver disponível, a chave não é salva.
+
+Chaves que versões anteriores tenham gravado em Base64 são migradas para armazenamento criptografado quando o `safeStorage` estiver disponível. Até essa migração, o arquivo antigo continua no diretório de dados do aplicativo.
 
 ---
 

@@ -7,3 +7,20 @@ out/
 .DS_Store
 *.env*
 !*.env.example
+
+# Local development instructions and user data
+.agents/
+perssua-key.enc*
+perssua-notes.json
+perssua-settings.json
+perssua-bounds.json
+
+# Local credentials
+.npmrc
+credentials.json
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
